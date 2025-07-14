@@ -1,17 +1,18 @@
-## Carbon recycling version
+## Carbon recycling version with DIC coming in for endosymb 10/7
+## Version 2.03
 import matplotlib.pyplot as plt
 import numpy as np
 
 
 def makeCons(changes=[]):
-    dict = {"s": 1, "b":1, "umax" : 0.01, "KN": 0.01, "KE": 0.1,"QHmin":0.1125, "QHmax":0.15, "QFood": 0.15, "QEmin": 0.03, "mE": 0.15, "mH": 0.02, "rho": 0.048}
+    dict = {"s": 1, "b":1, "umax" : 0.01, "KN": 0.01, "KE": 1,"QHmin":0.1125, "QHmax":0.15, "QEmin": 0.03, "mE": 0.15, "mH": 0.02}
 
     for change in changes:
         dict[change[0]] = change[1]
     return dict
 
 
-def makeFuncs(t, y, cD, rhoC, rhoN):  
+def makeFuncs(t, y, cD, rhoC, rhoDIC, rhoN):  
     E, H, QE, QH = y[0], y[1], y[2], y[3]
 
     eH  = cD["s"]*(1-cD["QHmin"]/QH) 
@@ -24,21 +25,21 @@ def makeFuncs(t, y, cD, rhoC, rhoN):
     mE = cD["mE"]
 
     rhoFood  = rhoC(E,H,QE,QH)         
-    rhoResp  = cD["b"]*(1+n)*( (1-eH)*rhoFood + 0*mH )* H/(cD["KE"]+E)
-    rhoPhoto = n*(rhoFood+0*mH/(1-eH))
+    rhoResp  = cD["b"]*(1+n)*( (1-eH)*rhoFood + rhoDIC(E,H,QE,QH) )* H/(cD["KE"]+E)
+    rhoPhoto = n*(rhoFood + 1/(1-eH)*rhoDIC(E,H,QE,QH))
 
     pH = eH*(rhoFood+rhoPhoto)
     pE = eE*rhoResp
                                              
     uH = rhoN(E,H,QE,QH) 
-    uE = cD["umax"] * (QH-cD["QHmin"])/( cD["KN"] + (QH-cD["QHmin"]) )           
+    uE = cD["umax"] * H*(QH-cD["QHmin"])/( cD["KN"] + H*(QH-cD["QHmin"]) )           
     
     return pH, pE, mH, mE, uH, uE, n, rhoFood, rhoResp, rhoPhoto   
 
 
-def endo(t, y, cD, rhoC, rhoN):
+def endo(t, y, cD, rhoC, rhoDIC, rhoN):
     E, H, QE, QH = y[0], y[1], y[2], y[3]
-    pH, pE, mH, mE, uH, uE, n, rhoFood, rhoResp, rhoPhoto = makeFuncs(t,y,cD,rhoC,rhoN)
+    pH, pE, mH, mE, uH, uE, n, rhoFood, rhoResp, rhoPhoto = makeFuncs(t,y,cD,rhoC,rhoDIC,rhoN)
 
     dE = pE*E - mE*E 
     dH = pH*H - mH*H
@@ -49,8 +50,8 @@ def endo(t, y, cD, rhoC, rhoN):
     return [dE,dH,dQE,dQH]
 
 
-def _plotLimFac(sol, cD, xSpant, rhoC, rhoN):
-    pH, pE, mH, mE, uH, uE, n, rhoFood, rhoResp, rhoPhoto = makeFuncs(sol.t,sol.y,cD,rhoC,rhoN)
+def _plotLimFac(sol, cD, xSpant, rhoC, rhoDIC, rhoN):
+    pH, pE, mH, mE, uH, uE, n, rhoFood, rhoResp, rhoPhoto = makeFuncs(sol.t,sol.y,cD,rhoC,rhoDIC,rhoN)
     fig, (ax1,ax2,ax3) = plt.subplots(nrows=3, ncols=1)
 
     ax1.plot(sol.t,uE,"g--", label=r"$u_E$")
@@ -80,11 +81,11 @@ def _plotLimFac(sol, cD, xSpant, rhoC, rhoN):
     
     
 
-def EtoHDiv(t,y,cD,rhoC,rhoN):
+def EtoHDiv(t,y,cD,rhoC,rhoDIC,rhoN):
     return y[0]/y[1] - 10
 EtoHDiv.terminal = True
 
-def extinctE(t,y,cD,rhoC,rhoN):
+def extinctE(t,y,cD,rhoC,rhoDIC,rhoN):
     return y[0]-1e-10
 extinctE.terminal = True
 
@@ -96,14 +97,16 @@ if __name__ == "__main__":
     import scipy.signal as signal
 
     def rhoC(E,H,QE,QH):
-        return 0.0 *3* (1-H/166) + 0.04
+        return 0.03 *2* (1-H/166)
+    def rhoDIC(E,H,QE,QH):
+        return 0.03
     def rhoN(E,H,QE,QH):
-        return 0.0*3* (1-H/166) * 0.20 * (1-(QH-0.1125)/(0.15-0.1125)) + 0.01*0.2
+        return rhoC(E,H,QE,QH) * 0.15     # * (1-(QH-0.1125)/(0.15-0.1125))
         
     y0 = [1, 40, 0.04, 0.12]
     tEnd = 1500
-    cD = makeCons([("s",1),("b",1),("KN",0.1),("KE",0.1),("umax", 0.03),("mE",0.15),("mH",0.02),("QEmin",0.03),("QHmin",0.1125)])
-    sol = integ.solve_ivp(endo, y0=y0, t_span=[0,tEnd], args=(cD,rhoC,rhoN), dense_output=False, method="Radau", max_step = np.inf, rtol=1e-8, atol = 1e-8, events=[EtoHDiv,extinctE])
+    cD = makeCons([("s",1),("b",1),("KN",0.5),("KE",1),("umax", 0.01),("mE",0.15),("mH",0.03)])
+    sol = integ.solve_ivp(endo, y0=y0, t_span=[0,tEnd], args=(cD,rhoC,rhoDIC,rhoN), dense_output=False, method="Radau", max_step = np.inf, rtol=1e-8, atol = 1e-8, events=[EtoHDiv,extinctE])
     print(sol)
 
 
@@ -136,5 +139,5 @@ if __name__ == "__main__":
     ax1.legend()
     ax2.legend()
 
-    _plotLimFac(sol,cD,xSpan,rhoC,rhoN)
+    _plotLimFac(sol,cD,xSpan,rhoC,rhoDIC,rhoN)
     plt.show()
