@@ -5,53 +5,53 @@ import numpy as np
 
 
 def makeCons(changes=[]):
-    dict = {"s": 1, "b":1, "umax" : 0.01, "KN": 0.01, "KE": 1,"QHmin":0.1125, "QHmax":0.15, "QEmin": 0.03, "mE": 0.15, "mH": 0.02}
+    dict = {"s": 1, "umax" : 0.07, "KN": 0.2, "KE": 0.2,"QHmin":0.1125, "QHmax":0.15, "QEmin": 0.03, "mE": 0.3, "mH": 0.03}
 
     for change in changes:
         dict[change[0]] = change[1]
     return dict
 
 
-def makeFuncs(t, y, cD, rhoC, rhoDIC, rhoN):  
+def makeFuncs(t, y, cD, rhoDOC, rhoDIC, rhoDON):  
     E, H, QE, QH = y[0], y[1], y[2], y[3]
 
     eH  = cD["s"]*(1-cD["QHmin"]/QH) 
     eE  = (1-cD["QEmin"]/QE)
-    g   = cD["b"]*(1-eE)*(1-eH)
+    g   = (1-eE)*(1-eH)
 
     n = g*E/(cD["KE"] + (1-g)*E) 
 
     mH = cD["mH"]
     mE = cD["mE"]
 
-    rhoFood  = rhoC(E,H,QE,QH)         
-    rhoResp  = cD["b"]*(1+n)*( (1-eH)*rhoFood + rhoDIC(E,H,QE,QH) )* H/(cD["KE"]+E)
-    rhoPhoto = n*(rhoFood + 1/(1-eH)*rhoDIC(E,H,QE,QH))
+    rhoFood  = rhoDOC(t,y,cD)         
+    rhoResp  = (1+n)*( (1-eH)*rhoFood + rhoDIC(t,y,cD) ) * H/(cD["KE"]+E)
+    rhoPhoto = n*(rhoFood + 1/(1-eH)*rhoDIC(t,y,cD))
 
     pH = eH*(rhoFood+rhoPhoto)
     pE = eE*rhoResp
                                              
-    uH = rhoN(E,H,QE,QH) 
-    uE = cD["umax"] * H*(QH-cD["QHmin"])/( cD["KN"] + H*(QH-cD["QHmin"]) )           
+    uH = rhoDON(t,y,cD) * (1-((QH-0.1125)/(0.15-0.1125))**2) 
+    uE = cD["umax"] * (H)*(QH-cD["QHmin"])/( cD["KN"] + (H)*(QH-cD["QHmin"]) )           
     
     return pH, pE, mH, mE, uH, uE, n, rhoFood, rhoResp, rhoPhoto   
 
 
-def endo(t, y, cD, rhoC, rhoDIC, rhoN):
+def endo(t, y, cD, rhoDOC, rhoDIC, rhoDON):
     E, H, QE, QH = y[0], y[1], y[2], y[3]
-    pH, pE, mH, mE, uH, uE, n, rhoFood, rhoResp, rhoPhoto = makeFuncs(t,y,cD,rhoC,rhoDIC,rhoN)
+    pH, pE, mH, mE, uH, uE, n, rhoFood, rhoResp, rhoPhoto = makeFuncs(t,y,cD,rhoDOC,rhoDIC,rhoDON)
 
     dE = pE*E - mE*E 
     dH = pH*H - mH*H
 
     dQE = uE - pE*QE           
-    dQH = uH - uE*E/H - pH*QH# + mH*QH *(1-(QH-cD["QHmin"])/(cD["QHmax"]-cD["QHmin"])) 
+    dQH = uH - uE*E/H - pH*QH # + mH*QH *(1-(QH-cD["QHmin"])/(cD["QHmax"]-cD["QHmin"])) 
 
     return [dE,dH,dQE,dQH]
 
 
-def _plotLimFac(sol, cD, xSpant, rhoC, rhoDIC, rhoN):
-    pH, pE, mH, mE, uH, uE, n, rhoFood, rhoResp, rhoPhoto = makeFuncs(sol.t,sol.y,cD,rhoC,rhoDIC,rhoN)
+def _plotLimFac(sol, cD, xSpant, rhoDOC, rhoDIC, rhoDON):
+    pH, pE, mH, mE, uH, uE, n, rhoFood, rhoResp, rhoPhoto = makeFuncs(sol.t,sol.y,cD,rhoDOC,rhoDIC,rhoDON)
     fig, (ax1,ax2,ax3) = plt.subplots(nrows=3, ncols=1)
 
     ax1.plot(sol.t,uE,"g--", label=r"$u_E$")
@@ -79,13 +79,24 @@ def _plotLimFac(sol, cD, xSpant, rhoC, rhoDIC, rhoN):
     ax2.legend()
     ax3.legend()
     
-    
+def _plotFitness(sol, cD, xSpant, rhoDOC, rhoDIC, rhoDON):
+    pH, pE, mH, mE, uH, uE, n, rhoFood, rhoResp, rhoPhoto = makeFuncs(sol.t,sol.y,cD,rhoDOC,rhoDIC,rhoDON)
+    fig, ax =plt.figure(), plt.subplot()
 
-def EtoHDiv(t,y,cD,rhoC,rhoDIC,rhoN):
-    return y[0]/y[1] - 10
+    ax.plot(sol.t, pH-mH, "C0", label="H fitness")
+    ax.plot(sol.t, pE-mE, "C2", label="E fitness")
+    ax.set_title("Fitness of the partners") 
+    ax.set_ylabel(r"days$^{-1}$")
+    ax.set_xlabel("days")
+    ax.set_xlim(xSpan)
+    ax.legend()
+
+
+def EtoHDiv(t,y,cD,rhoDOC,rhoDIC,rhoDON):
+    return y[0]/y[1] - 1
 EtoHDiv.terminal = True
 
-def extinctE(t,y,cD,rhoC,rhoDIC,rhoN):
+def extinctE(t,y,cD,rhoDOC,rhoDIC,rhoDON):
     return y[0]-1e-10
 extinctE.terminal = True
 
@@ -96,17 +107,20 @@ if __name__ == "__main__":
     import scipy.integrate as integ
     import scipy.signal as signal
 
-    def rhoC(E,H,QE,QH):
-        return 0.03 *2* (1-H/166)
-    def rhoDIC(E,H,QE,QH):
-        return 0.03
-    def rhoN(E,H,QE,QH):
-        return rhoC(E,H,QE,QH) * 0.15     # * (1-(QH-0.1125)/(0.15-0.1125))
+    def rhoDOC(t,y,cD):
+        E, H, QE, QH = y[0], y[1], y[2], y[3]
+        return 0.03 *4* (1-H/166)
+    def rhoDIC(t,y,cD):
+        E, H, QE, QH = y[0], y[1], y[2], y[3]
+        return cD["mH"]*0.0
+    def rhoDON(t,y,cD):
+        E, H, QE, QH = y[0], y[1], y[2], y[3]
+        return rhoDOC(t,y,cD) * 0.15 + cD["mH"]*0.0
         
-    y0 = [1, 40, 0.04, 0.12]
-    tEnd = 1500
-    cD = makeCons([("s",1),("b",1),("KN",0.5),("KE",1),("umax", 0.01),("mE",0.15),("mH",0.03)])
-    sol = integ.solve_ivp(endo, y0=y0, t_span=[0,tEnd], args=(cD,rhoC,rhoDIC,rhoN), dense_output=False, method="Radau", max_step = np.inf, rtol=1e-8, atol = 1e-8, events=[EtoHDiv,extinctE])
+    y0 = [4, 80, 0.04, 0.12]
+    tEnd = 600
+    cD = makeCons([("s",0.66),("KN",0.2),("KE",0.2),("umax", 0.07),("mE",0.8),("mH",0.03),("QHmin",0.1125),("QEmin",0.03)])
+    sol = integ.solve_ivp(endo, y0=y0, t_span=[0,tEnd], args=(cD,rhoDOC,rhoDIC,rhoDON), dense_output=False, method="Radau", max_step = np.inf, rtol=1e-8, atol = 1e-8, events=[EtoHDiv,extinctE])
     print(sol)
 
 
@@ -139,5 +153,6 @@ if __name__ == "__main__":
     ax1.legend()
     ax2.legend()
 
-    _plotLimFac(sol,cD,xSpan,rhoC,rhoDIC,rhoN)
+    _plotLimFac(sol,cD,xSpan,rhoDOC,rhoDIC,rhoDON)
+    #_plotFitness(sol,cD,xSpan,rhoDOC,rhoDIC,rhoDON)
     plt.show()
