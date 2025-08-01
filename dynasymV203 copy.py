@@ -1,11 +1,10 @@
-## Carbon recycling version with DIC coming in for endosymb 10/7
-## Version 2.03
+## I dont even know 1/8
 import matplotlib.pyplot as plt
 import numpy as np
 
 
 def makeCons(changes=[]):
-    dict = {"s": 1, "umax" : 0.07, "KN": 0.2, "KE": 0.2,"QHmin":0.1125, "QHmax":0.15, "QEmin": 0.03, "mE": 0.3, "mH": 0.03}
+    dict = {"s": 1, "umax" : 0.07, "KN": 0.2, "b": 2,"QHmin":0.1125, "QHmax":0.15, "QEmin": 0.03, "mE": 0.3, "mH": 0.03}
 
     for change in changes:
         dict[change[0]] = change[1]
@@ -17,22 +16,22 @@ def makeFuncs(t, y, cD, rhoDOC, rhoDIC, rhoDON):
 
     eH  = cD["s"]*(1-cD["QHmin"]/QH) 
     eE  = (1-cD["QEmin"]/QE)
-    g   = (1-eE)*(1-eH)
+    g = cD["b"]*(1-eE)*(1-eH)
 
-    n = g*E/(cD["KE"] + (1-g)*E) 
+    n = g*E/(H-g*E) 
 
     mH = cD["mH"]
     mE = cD["mE"]
 
     rhoFood  = rhoDOC(t,y,cD)         
-    rhoResp  = (1+n)*( (1-eH)*rhoFood + rhoDIC(t,y,cD) ) * H/(cD["KE"]+E)
+    rhoResp  = cD["b"]*(1-eH)*(1+n*E/H)*rhoFood
     rhoPhoto = n*(rhoFood + 1/(1-eH)*rhoDIC(t,y,cD))
 
-    pH = eH*(rhoFood+rhoPhoto)
-    pE = eE*rhoResp
+    pH = eH*(1+n*E/H)*rhoFood
+    pE = eE*rhoResp*H/E
                                              
     uH = rhoDON(t,y,cD) * (1-((QH-0.1125)/(0.15-0.1125))**2) 
-    uE = cD["umax"] *(QH-cD["QHmin"])/(cD["QHmax"]-cD["QHmin"]) #/( cD["KN"] + (QH-cD["QHmin"]) )           
+    uE = cD["umax"] *(QH-cD["QHmin"])/( cD["KN"] + (QH-cD["QHmin"]) )           
     
     return pH, pE, mH, mE, uH, uE, n, rhoFood, rhoResp, rhoPhoto   
 
@@ -116,11 +115,11 @@ if __name__ == "__main__":
         return cD["mH"]*0
     def rhoDON(t,y,cD):
         E, H, QE, QH = y[0], y[1], y[2], y[3]
-        return rhoDOC(t,y,cD) * 0.15 + cD["mH"]*0.5
+        return rhoDOC(t,y,cD) * 0.15 + cD["mH"]*0
         
-    y0 = [1e-5, 60, 0.031, 0.15]
-    tEnd = 1200
-    cD = makeCons([("s",1),("KN",0.0001),("KE",0.1),("umax", 0.01),("mE",0.2),("mH",0.03),("QHmin",0.1125),("QEmin",0.03)])
+    y0 = [1, 60, 0.04, 0.12]
+    tEnd = 600
+    cD = makeCons([("s",1),("KN",0.05),("KE",0.0),("umax", 0.06),("mE",0.4),("mH",0.03),("QHmin",0.1125),("QEmin",0.03)])
     sol = integ.solve_ivp(endo, y0=y0, t_span=[0,tEnd], args=(cD,rhoDOC,rhoDIC,rhoDON), dense_output=False, method="Radau", max_step = np.inf, rtol=1e-8, atol = 1e-8, events=[EtoHDiv,extinctE])
     print(sol)
 
