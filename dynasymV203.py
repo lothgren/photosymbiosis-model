@@ -32,7 +32,7 @@ def makeFuncs(t, y, cD, rhoDOC, rhoDIC, rhoDON):
     pE = eE*rhoResp
                                              
     uH = rhoDON(t,y,cD) * (1-((QH-0.1125)/(0.15-0.1125))**2) 
-    uE = cD["umax"] *(QH-cD["QHmin"])/(cD["QHmax"]-cD["QHmin"]) #/( cD["KN"] + (QH-cD["QHmin"]) )           
+    uE = cD["umax"] *H*(QH-cD["QHmin"])/( cD["KN"] + H*(QH-cD["QHmin"]) )           
     
     return pH, pE, mH, mE, uH, uE, n, rhoFood, rhoResp, rhoPhoto   
 
@@ -65,13 +65,15 @@ def _plotLimFac(sol, cD, xSpan, rhoDOC, rhoDIC, rhoDON):
     ax2.plot(sol.t, rhoPhoto,"g", label=r"$\rho_{photo}$")
     ax2.plot(sol.t, rhoFood,"k", label=r"$\rho_{Food}$")
 
-    ax3.plot(sol.t, rhoResp,"b", label=r"$\rho_{resp}$")
+    ax3.plot(sol.t, rhoResp,"b", label=r"$\rho_{CO_2}$")
     ax3.plot(sol.t,mE*np.ones(len(sol.t)),"r--", label="$m_E$")
     #ax3.plot(sol.t,n,"k--",label=r"$\eta$")
-    ax3.plot(sol.t,pE,"g", label="$p_E$")
+    ax3.plot(sol.t,pE,"g", label=r"$\mu_E$")
+    ax3.set_ylim(bottom=-0.3,top=max(pE)+0.5)
 
     ax1.set_title("") 
-    ax1.set_ylabel(r"days$^{-1}$")
+    fig.supylabel(r"days$^{-1}$")
+
     ax2.set_xlabel("days")
     ax1.set_xlim(xSpan)
     ax2.set_xlim(xSpan)
@@ -113,14 +115,14 @@ if __name__ == "__main__":
         return 0.03 *4* (1-H/166)
     def rhoDIC(t,y,cD):
         E, H, QE, QH = y[0], y[1], y[2], y[3]
-        return cD["mH"]*0
+        return cD["mH"]*3
     def rhoDON(t,y,cD):
         E, H, QE, QH = y[0], y[1], y[2], y[3]
-        return rhoDOC(t,y,cD) * 0.15 + cD["mH"]*0.5
+        return rhoDOC(t,y,cD) * 0.15 + cD["mH"]*0.0
         
-    y0 = [1e-5, 60, 0.031, 0.15]
-    tEnd = 1200
-    cD = makeCons([("s",1),("KN",0.0001),("KE",0.1),("umax", 0.01),("mE",0.2),("mH",0.03),("QHmin",0.1125),("QEmin",0.03)])
+    y0 = [1e-5, 40, 0.05, 0.14]
+    tEnd = 400
+    cD = makeCons([("s",1),("KN",0.1),("KE",0.2),("umax", 0.07),("mE",0.4),("mH",0.03),("QHmin",0.1125),("QEmin",0.03)])
     sol = integ.solve_ivp(endo, y0=y0, t_span=[0,tEnd], args=(cD,rhoDOC,rhoDIC,rhoDON), dense_output=False, method="Radau", max_step = np.inf, rtol=1e-8, atol = 1e-8, events=[EtoHDiv,extinctE])
     print(sol)
 

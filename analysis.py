@@ -47,7 +47,7 @@ def plotKE(rhoDOC,rhoDIC,rhoDON,cons):
 
 
 def plotTempBifur(rhoDOC,rhoDIC,rhoDON,cons):
-    paraList, y = simpleBifur("s",[0.5,3],rhoDOC,rhoDIC,rhoDON,cons=cons)
+    paraList, y = simpleBifur("s",[0.66,3],rhoDOC,rhoDIC,rhoDON,cons=cons)
     x = np.flip(1/paraList) # np.linspace(0,len(paraList),len(paraList)) - len(paraList)*(1-0.5)/(1.5-0.5)
 
     fig, ax = plt.figure(), plt.subplot()
@@ -75,10 +75,10 @@ if __name__ == "__main__":
         E, H, QE, QH = y[0], y[1], y[2], y[3]
         return rhoDOC(t,y,cD) * 0.15 + cD["mH"]*0.0
     
-    cons =[("umax",0.07),("KN",0.2),("KE",0.2),("mE",0.4),("mH",0.03)]
+    cons = [("s",1),("KN",0.2),("KE",0.2),("umax", 0.07),("mE",0.4),("mH",0.03),("QHmin",0.1125),("QEmin",0.03)]
 
 
-    #plotUmax(rhoDOC,rhoDIC,rhoDON,cons)
-    #plotKE(rhoDOC,rhoDIC,rhoDON,cons)
+    plotUmax(rhoDOC,rhoDIC,rhoDON,cons)
+    plotKE(rhoDOC,rhoDIC,rhoDON,cons)
     plotTempBifur(rhoDOC,rhoDIC,rhoDON,cons)
     plt.show()

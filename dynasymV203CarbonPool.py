@@ -30,7 +30,7 @@ def makeFuncs(t, y, cD, rhoDOC, rhoDON):
     rhoResp = (1-eH)*(rhoDOC(t,y,cD)+rhoPhoto)*cD["DIC"]
                                              
     uH = rhoDON(t,y,cD) * (1-((QH-0.1125)/(0.15-0.1125))**2) 
-    uE = cD["umax"] *(QH-cD["QHmin"])/( cD["KN"] + (QH-cD["QHmin"]) )           
+    uE = cD["umax"] *H*(QH-cD["QHmin"])/( cD["KN"] + H*(QH-cD["QHmin"]) )           
     
     return pH, pE, mH, mE, uH, uE, rhoResp, rhoCO2   
 
@@ -45,7 +45,7 @@ def endo(t, y, cD, rhoDOC,rhoDON):
     dQE = uE - pE*QE           
     dQH = uH - uE*E/H - pH*QH
 
-    dC  = rhoResp - rhoCO2*E/H - cD["d"]*H**(-1/3)*C
+    dC  = rhoResp*H - rhoCO2*E - cD["d"]*H**(2/3)*C
 
     return [dE,dH,dQE,dQH,dC]
 
@@ -105,7 +105,7 @@ if __name__ == "__main__":
     
     y0 = [1, 60, 0.04, 0.12, 4]
     tEnd = 600
-    cD = makeCons([("s",1),("pmax",1), ("KCO_2", 0.4),("KN",0.03),("umax", 0.05),("mE",0.4),("mH",0.03)])
+    cD = makeCons([("s",1),("pmax",2), ("KCO_2", 10),("KN",0.5),("umax", 0.05),("mE",0.1),("mH",0.03)])
     sol = integ.solve_ivp(endo, y0=y0, t_span=[0,tEnd], args=(cD,rhoDOC,rhoDON), dense_output=False, method="Radau", max_step = np.inf, rtol=1e-8, atol = 1e-8, events=[EtoHDiv,extinctE])
     print(sol)
 
