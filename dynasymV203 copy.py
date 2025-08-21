@@ -4,7 +4,7 @@ import numpy as np
 
 
 def makeCons(changes=[]):
-    dict = {"s": 1, "umax" : 0.07, "KN": 0.2, "b": 1,"QHmin":0.1125, "QHmax":0.15, "QEmin": 0.03, "mE": 0.3, "mH": 0.03}
+    dict = {"s": 1, "umax" : 0.07, "KL": 0.2, "KN": 0.2, "b": 1,"QHmin":0.1125, "QHmax":0.15, "QEmin": 0.03, "mE": 0.3, "mH": 0.03}
 
     for change in changes:
         dict[change[0]] = change[1]
@@ -18,13 +18,13 @@ def makeFuncs(t, y, cD, rhoDOC,rhoDON):
     eE  = (1-cD["QEmin"]/QE)
     g = cD["b"]*(1-eE)*(1-eH)
 
-    n = g*L/(1-g*L) 
+    n = g*L/(cD["KL"]+(1-g)*L)
 
     mH = cD["mH"]
     mE = cD["mE"]
 
     rhoFood  = rhoDOC(t,y,cD)         
-    rhoResp  = cD["b"]*(1-eH)*(1+n)*rhoFood
+    rhoResp  = cD["b"]*(1-eH)*(1+n)*rhoFood*1/(cD["KL"]+L)
     rhoPhoto = n*(rhoFood)
 
     pH = eH*(1+n)*rhoFood
@@ -116,7 +116,7 @@ if __name__ == "__main__":
         
     y0 = [0.01, 60, 0.04, 0.12]
     tEnd = 600
-    cD = makeCons([("s",1),("b",2),("KN",0.05),("KL",0.022),("umax", 0.07),("mE",0.4),("mH",0.03),("QHmin",0.1125),("QEmin",0.03)])
+    cD = makeCons([("s",1),("b",1),("KN",0.05),("KL",0.02),("umax", 0.07),("mE",0.4),("mH",0.03),("QHmin",0.1125),("QEmin",0.03)])
     sol = integ.solve_ivp(endo, y0=y0, t_span=[0,tEnd], args=(cD,rhoDOC,rhoDON), dense_output=False, method="Radau", max_step = np.inf, rtol=1e-8, atol = 1e-8, events=[EtoHDiv,extinctE])
     print(sol)
 
