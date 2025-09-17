@@ -1,6 +1,6 @@
 #Tools to analyse coral model (created 20/6)
 
-from dynasymV203CarbonPool import *
+from model import *
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.integrate as integ
@@ -8,9 +8,14 @@ from scipy import signal as signal
 import sympy as sp
 
 
+def symbDeath(t,y,cD,envFlows):
+    return y[1]-1e-10
+symbDeath.terminal = True
+
+
 def simSystem(y0,tSpan,cons,envFlows):
     cD  = makeCons(cons)
-    sol = integ.solve_ivp(endo, y0=y0, t_span=tSpan, args=(cD,envFlows), dense_output=False, method="Radau", max_step = np.inf, rtol=1e-8, atol = 1e-8, events=[extinctE])
+    sol = integ.solve_ivp(endo, y0=y0, t_span=tSpan, args=(cD,envFlows), dense_output=False, method="Radau", max_step = np.inf, rtol=1e-8, atol = 1e-8, events=[symbDeath])
     funcs = makeFuncs(sol.t,sol.y,cD,envFlows)
     return sol, funcs
 
@@ -19,49 +24,91 @@ def makeDf(sol,funcs):
     return
 
 
-def plotSim(y):
+def plotSim(t,y):
+    """Ploting a simulation in matplotlib"""
     return
 
 
-def simpleBifur(para, span, envFlows,cons = []):
-    y0 = [1, 60, 0.04, 0.12, 0.1]
+def simpleBifur(para, span, envFlows, cons = []):
+    y0 = [60, 1, 0.04, 0.12, 0.1]
     tEnd = 4000
-    paraList = np.linspace(span[0],span[1],200)
+    paraList = np.linspace(span[0],span[1],100)
 
     lastList = []
     for paraValue in paraList:
         newCons = cons + [(para,paraValue)]
         sol, funcs = simSystem(y0,[0,4000],newCons,envFlows)
-        pH, *dummy = funcs
-        if sol.status == 1:
-            lastList.append([sol.y[0,-1]*sol.y[1,-1], 0, sol.y[0,-1]])
-        else:
-            lastList.append([sol.y[0,-1]*sol.y[1,-1], sol.y[1,-1], sol.y[0,-1]])
-    
+        lastList.append([sol.y[1,-1]/sol.y[0,-1], sol.y[0,-1], sol.y[1,-1]])
+        
     return paraList, np.array(lastList)
 
 
-def bifur(para,span,cons = [], initVal = None): ## Under construction
-    y0 = initVal or [4, 40, 0.04, 0.16]
-    tEnd = 4000
-    paraList = np.linspace(span[0],span[1],1000)
+def findOsc(y, tol = 1e-3):
+    """Checks if vector oscilate at some period and returns mins and max of the oscillations
 
-    minMax = []
+    Arguments:
+    y: array like, vector of which oscillation is check (OBS: should be evenly spaced in timesteps)
+    tol: float tolerence of solution 
+
+    Returns:
+    bool: False if convergence to fixed point, True otherwise
+    list: Max and min values as lists
+    """
+    cv = np.std(y)/np.mean(y)  ## checking cv to see if no oscillations are occuring
+    if cv<=tol:
+        return [y[-1]], [y[-1]]
+    
+    maxIndex, _ = signal.find_peaks(y)
+    minIndex, _ = signal.find_peaks(-y)
+    yMax, yMin = [], []
+    for i in range(len(maxIndex)-1):
+        yMax.append(y[maxIndex[-i]])
+        if abs(y[maxIndex[-i]]-y[maxIndex[-i-1]])<=tol:
+            break
+    for j in range(len(minIndex)-1):
+        yMin.append(y[minIndex[-i]])
+        if abs(y[minIndex[-i]]-y[minIndex[-i-1]])<=tol:
+            break
+
+    return yMax, yMin
+    
+
+
+def bifur(para,span, envFlows, cons = [], initVal = None): ## Under construction
+    y0 = initVal or [60, 1, 0.04, 0.12, 0.1]
+    tEnd = 4000
+    paraList = np.linspace(span[0],span[1],200)
+
+    minMax = [[], [], []]
     for paraValue in paraList:
         cD = makeCons([(para,paraValue)]+cons)
-        sol = integ.solve_ivp(endo, y0=y0, t_span=[0,tEnd], t_eval=np.linspace(0,tEnd,tEnd*100), args=(cD,), dense_output=False, method="Radau", max_step = np.inf, rtol=1e-8, atol = 1e-8, events=[EtoHDiv,extinctE])
+        sol = integ.solve_ivp(endo, y0=y0, t_span=[0,tEnd], t_eval=np.linspace(7*tEnd//10,tEnd,3*tEnd*10), args=(cD,envFlows), 
+                              dense_output=False, vectorized=True, method="Radau", max_step = np.inf, rtol=1e-8, atol = 1e-8, events=[])
         
-        minMax.append()
+        HMax, HMin = findOsc(sol.y[0,:])
+        EMax, EMin = findOsc(sol.y[1,:])
+        HLen, ELen = len(HMax)+len(HMin), len(EMax)+len(EMin)
+        if HLen >= ELen:
+            minMax[0] = minMax[0] + [paraValue]*HLen
+            minMax[1] = minMax[1] + HMax + HMin
+            minMax[2] = minMax[2] + EMax + EMin + (HLen-ELen)*[None]
+        else:
+            minMax[0] = minMax[0] + [paraValue]*ELen
+            minMax[1] = minMax[1] + HMax + HMin + (ELen-HLen)*[None]
+            minMax[2] = minMax[2] + EMax + EMin 
+
+    return minMax
+        
 
 
 def plotBifur(para,span,envFlows,cons, bFunc = simpleBifur):
 
     x, y = bFunc(para,span,envFlows,cons=cons)
-
+    
     fig, ax = plt.figure(), plt.subplot()
-    ax.plot(x, y[:,2],".", color="gold", label = "$E/H$", ms=2, alpha=1)
+    ax.plot(x, y[:,0],".", color="gold", label = "$E/H$", ms=2, alpha=1)
     twin = ax.twinx()
-    twin.plot(x, y[:,0], label = "$E$", color="C2", marker=".", ls="", ms=2, alpha=1)
+    twin.plot(x, y[:,2], label = "$E$", color="C2", marker=".", ls="", ms=2, alpha=1)
     twin.plot(x, y[:,1], label = "$H$", color ="C0", marker=".", ls="", ms=2, alpha=1)
     
     ax.set_xlabel(para)
@@ -96,24 +143,16 @@ def plotFitnessVsE(H,QE,QH, cons=[]):
     plt.show()
 
 
-def solveSomeEqs():
-    a,b,rho,p,H,K,y = sp.symbols("a b rho p H K y")
-
-    x = (1-a)*(rho+y)
-    sol = sp.solve( y-(1-b)*p*(x*H)/(x*H+K), y )
-    print(sol)
-
 
 if __name__ == "__main__":
     def rhoDOC(t,y,cD):
-        E, H, QE, QH = y[0], y[1], y[2], y[3]
-        return 0.03 *2* (1-H/166)
-    def rhoDIC(t,y,cD):
-        E, H, QE, QH = y[0], y[1], y[2], y[3]
-        return cD["mH"]*0.0
+        H, E, QE, QH, C = y
+        return 0.03 *3* (1-H/166)
     def rhoDON(t,y,cD):
-        E, H, QE, QH = y[0], y[1], y[2], y[3]
-        return rhoDOC(t,y,cD) * 0.15 + cD["mH"]*0.0
-    cons = []
-    plotBifur("umax", [0.01,1.7], [rhoDOC,rhoDON], cons)
+        H, E, QE, QH, C = y
+        return rhoDOC(t,y,cD) * 0.15 + cD["mH"]*QH*0.9
+    
+    cons = [("s",1), ("mH",0.03),("mE",0.3),("KN",0.005),("umax",0.02)]
+
+    plotBifur("s", [0.25,2], [rhoDOC,rhoDON], cons)
     plt.show()
