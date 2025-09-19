@@ -5,7 +5,7 @@ import numpy as np
 
 
 def makeCons(changes=[]):
-    dict = {"s": 1, "pmax": 1, "KCO_2": 0.01, "b": 0.5, "d": 0.5, "CI": 0.5, "KN": 0.1, "umax" : 0.07, "QHmin": 0.075, "QHmax":0.15, "QEmin": 0.03, "mE": 0.3, "mH": 0.03}
+    dict = {"s": 1, "pmax": 1, "KCO_2": 0.01, "a":0.9, "b": 0.5, "d": 0.5, "CI": 0.5, "KN": 0.1, "umax" : 0.07, "QHmin": 0.075, "QHmax":0.15, "QEmin": 0.03, "mE": 0.3, "mH": 0.03}
 
     for change in changes:
         dict[change[0]] = change[1]
@@ -16,17 +16,20 @@ def makeFuncs(t, y, cD, envFlows):
     H, E, QE, QH, C = y
     rhoDOC,rhoDON = envFlows
 
-    eH  = cD["s"]*(1-cD["QHmin"]/QH)
-    eE  = (1-cD["QEmin"]/QE)
+    a = cD["a"]
+    b = cD["b"] # np.maximum(np.sin(2*np.pi*t),0)
 
-    vE = cD["pmax"] * C/(cD["KCO_2"] + C)
-    rhoPhoto = (1-eE)*vE*E/H
-    vH = cD["b"]*(1-eH)*(rhoDOC(t,y,cD) + rhoPhoto) + 0.9*cD["mH"]
+    eH  = np.minimum(1/(cD["s"]+1), 1-cD["QHmin"]/QH)
+    eE  = np.minimum(1/(cD["s"]+1), 1-cD["QEmin"]/QE)
+
+    vE = b * cD["pmax"] * C/(cD["KCO_2"] + C)
+    rhoPhoto = (1-(1+cD["s"])*eE)*vE*E/H
+    vH = (1-eH)*(rhoDOC(t,y,cD) + rhoPhoto) + a*cD["mH"] + cD["s"]*eE*vE*E/H
 
     muH = eH*(rhoDOC(t,y,cD) + rhoPhoto)
     muE = eE*vE
 
-    uH = rhoDON(t,y,cD) * (1-((QH-cD["QHmin"])/(cD["QHmax"]-cD["QHmin"]))**10)
+    uH = (rhoDON(t,y,cD) + a*cD["mH"]*QH ) * (1-((QH-cD["QHmin"])/(cD["QHmax"]-cD["QHmin"]))**10)
     uE = cD["umax"] *(QH-cD["QHmin"])/( cD["KN"] + (QH-cD["QHmin"]) )
 
     return vE, vH, muH, muE, uH, uE, rhoPhoto
@@ -74,7 +77,9 @@ def _plotLimFac(t, y, cD, envFlows):
     ax3.set_xlabel("days")
     fig.supylabel(r"days$^{-1}$")
 
-
+def symbDeath(t,y,cD,envFlows):
+    return y[1]-1e-10
+symbDeath.terminal = True
 
 if __name__ == "__main__":
     import numpy as np
@@ -84,17 +89,17 @@ if __name__ == "__main__":
 
     def rhoDOC(t,y,cD):
         H, E, QE, QH, C = y
-        return 0.03 *4* (1-H/166)
+        return 0.03 *3* (1-H/166)
     def rhoDON(t,y,cD):
         H, E, QE, QH, C = y
-        return rhoDOC(t,y,cD)*0.15 + cD["mH"]*QH*0.9
+        return rhoDOC(t,y,cD)*0.15
     
     y0 = [60, 0.1, 0.04, 0.12, 0.1]
-    tEnd = 500
-    cD = makeCons([("s",1), ("mH",0.03),("mE",0.3),("KN",0.02),("umax",0.03),("pmax",3),("CI",0.5)])                  #Read up on vectorized!
-    sol = integ.solve_ivp(endo, y0=y0, t_span=[0,tEnd], args=(cD,[rhoDOC,rhoDON],), dense_output=False, vectorized=True, method="Radau", max_step = np.inf, rtol=1e-8, atol = 1e-8, events=[])
+    tEnd = 1200
+    cD = makeCons([("s", 1.70), ("mH",0.03),("mE",0.55),("KN",0.05),("umax",0.03),("pmax",3),("CI",0.2)])                  
+    sol = integ.solve_ivp(endo, y0=y0, t_span=[0,tEnd], args=(cD,[rhoDOC,rhoDON],), t_eval=np.linspace(9*tEnd//10,tEnd,tEnd*10), dense_output=False, vectorized=True, method="Radau", max_step = np.inf, rtol=1e-8, atol = 1e-8, events=[symbDeath])
     print(sol)
-
+    print(sol.y_events[0][0][0])
 
 
     ### Plotting 

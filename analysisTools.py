@@ -31,16 +31,17 @@ def plotSim(t,y):
 
 def simpleBifur(para, span, envFlows, cons = []):
     y0 = [60, 1, 0.04, 0.12, 0.1]
-    tEnd = 4000
-    paraList = np.linspace(span[0],span[1],100)
+    tEnd = 10000
+    paraList = np.linspace(span[0],span[1],200)
 
-    lastList = []
+    lastList = [[],[]]
     for paraValue in paraList:
         newCons = cons + [(para,paraValue)]
-        sol, funcs = simSystem(y0,[0,4000],newCons,envFlows)
-        lastList.append([sol.y[1,-1]/sol.y[0,-1], sol.y[0,-1], sol.y[1,-1]])
+        sol, funcs = simSystem(y0,[0,tEnd],newCons,envFlows)
+        lastList[0].append(sol.y[0,-1])
+        lastList[1].append(sol.y[1,-1])
         
-    return paraList, np.array(lastList)
+    return [paraList] + lastList
 
 
 def findOsc(y, tol = 1e-3):
@@ -76,25 +77,31 @@ def findOsc(y, tol = 1e-3):
 
 def bifur(para,span, envFlows, cons = [], initVal = None): ## Under construction
     y0 = initVal or [60, 1, 0.04, 0.12, 0.1]
-    tEnd = 4000
+    tEnd = 10000
     paraList = np.linspace(span[0],span[1],200)
 
     minMax = [[], [], []]
     for paraValue in paraList:
-        cD = makeCons([(para,paraValue)]+cons)
-        sol = integ.solve_ivp(endo, y0=y0, t_span=[0,tEnd], t_eval=np.linspace(7*tEnd//10,tEnd,3*tEnd*10), args=(cD,envFlows), 
-                              dense_output=False, vectorized=True, method="Radau", max_step = np.inf, rtol=1e-8, atol = 1e-8, events=[])
+        cD = makeCons(cons + [(para,paraValue)])
+        sol = integ.solve_ivp(endo, y0=y0, t_span=[0,tEnd], t_eval=np.linspace(9*tEnd//10,tEnd,tEnd*10), args=(cD,envFlows), 
+                              dense_output=False, vectorized=True, method="Radau", max_step = np.inf, rtol=1e-8, atol = 1e-8, events=[symbDeath])
         
+        if sol.status == 1:                #Added if statement to catch event edosymbiont exstinction
+            minMax[0] = minMax[0] + [paraValue]
+            minMax[1] = minMax[1] + [sol.y_events[0][0][0]]
+            minMax[2] = minMax[2] + [sol.y_events[0][0][1]]
+            continue
+
         HMax, HMin = findOsc(sol.y[0,:])
         EMax, EMin = findOsc(sol.y[1,:])
         HLen, ELen = len(HMax)+len(HMin), len(EMax)+len(EMin)
         if HLen >= ELen:
             minMax[0] = minMax[0] + [paraValue]*HLen
             minMax[1] = minMax[1] + HMax + HMin
-            minMax[2] = minMax[2] + EMax + EMin + (HLen-ELen)*[None]
+            minMax[2] = minMax[2] + EMax + EMin + (HLen-ELen)*[np.nan]
         else:
             minMax[0] = minMax[0] + [paraValue]*ELen
-            minMax[1] = minMax[1] + HMax + HMin + (ELen-HLen)*[None]
+            minMax[1] = minMax[1] + HMax + HMin + (ELen-HLen)*[np.nan]
             minMax[2] = minMax[2] + EMax + EMin 
 
     return minMax
@@ -103,13 +110,15 @@ def bifur(para,span, envFlows, cons = [], initVal = None): ## Under construction
 
 def plotBifur(para,span,envFlows,cons, bFunc = simpleBifur):
 
-    x, y = bFunc(para,span,envFlows,cons=cons)
+    Y = np.array(bFunc(para,span,envFlows,cons=cons))
+    p, H, E = Y
+
     
     fig, ax = plt.figure(), plt.subplot()
-    ax.plot(x, y[:,0],".", color="gold", label = "$E/H$", ms=2, alpha=1)
+    ax.plot(p, E/H,".", color="gold", label = "$E/H$", ms=2, alpha=1)
     twin = ax.twinx()
-    twin.plot(x, y[:,2], label = "$E$", color="C2", marker=".", ls="", ms=2, alpha=1)
-    twin.plot(x, y[:,1], label = "$H$", color ="C0", marker=".", ls="", ms=2, alpha=1)
+    twin.plot(p, H, label = "$H$", color ="C0", marker=".", ls="", ms=2, alpha=1)
+    twin.plot(p, E, label = "$E$", color="C2", marker=".", ls="", ms=2, alpha=1)
     
     ax.set_xlabel(para)
     ax.set_ylabel("E/H at equilibrium")
@@ -150,9 +159,12 @@ if __name__ == "__main__":
         return 0.03 *3* (1-H/166)
     def rhoDON(t,y,cD):
         H, E, QE, QH, C = y
-        return rhoDOC(t,y,cD) * 0.15 + cD["mH"]*QH*0.9
+        return rhoDOC(t,y,cD) * 0.15
     
-    cons = [("s",1), ("mH",0.03),("mE",0.3),("KN",0.005),("umax",0.02)]
+    cons = [("s", 1.7), ("mH",0.03),("mE",0.3),("KN",0.05),("umax",0.03),("pmax",3),("CI",0.2)]
 
-    plotBifur("s", [0.25,2], [rhoDOC,rhoDON], cons)
+    plotBifur("mE", [0.2,0.7], [rhoDOC,rhoDON], cons, bFunc=bifur)
+    plt.savefig("figs/bifur_mE_(s=1.7).svg")
     plt.show()
+
+    

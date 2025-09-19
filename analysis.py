@@ -8,7 +8,7 @@ import sympy as sp
 
 def rhoDOC(t,y,cD):
         H, E, QE, QH, C = y
-        return 0.03 *2* (1-H/166)
+        return 0.03 *3* (1-H/166)
 def rhoDON(t,y,cD):
     H, E, QE, QH, C = y
     return rhoDOC(t,y,cD)*0.15 + cD["mH"]*QH*0.9
@@ -22,7 +22,7 @@ def rhoDON(t,y,cD):
 
 def stepWiseSim():
     y0 = [5, 0, 0.04, 0.12, 0.0]                              # Plot establishing of host
-    cD = makeCons([("s",1), ("mH",0.03),("mE",0.3),("KN",0.02),("umax",0.025),("pmax",1)]) 
+    cD = makeCons([("s", 1), ("mH",0.03),("mE",0.3),("KN",0.05),("umax",0.03),("pmax",3),("CI",0.2)]) 
     sol1 = integ.solve_ivp(endo, y0=y0, t_span=[0,500], args=(cD,[rhoDOC,rhoDON],), dense_output=False, method="Radau", max_step = np.inf, rtol=1e-8, atol = 1e-8, events=[])
     sol1.y[1,:] = np.array([None]*len(sol1.y[1,:]))
     sol1.y[2,:] = np.array([None]*len(sol1.y[1,:]))
@@ -30,7 +30,7 @@ def stepWiseSim():
     ny0 = [sol1.y[0,-1], 1e-2, 0.04, sol1.y[3,-1], sol1.y[4,-1]]
     sol2 = integ.solve_ivp(endo, y0=ny0, t_span=[500,800], args=(cD,[rhoDOC,rhoDON],), dense_output=False, method="Radau", max_step = np.inf, rtol=1e-8, atol = 1e-8, events=[])
 
-    cD = makeCons([("s",0.25), ("mH",0.03),("mE",0.3),("KN",0.02),("umax",0.025),("pmax",1)])
+    cD = makeCons([("s", 2), ("mH",0.03),("mE",0.3),("KN",0.05),("umax",0.03),("pmax",3),("CI",0.2)])
     ny0 = sol2.y[:,-1]
     sol3 = integ.solve_ivp(endo, y0=ny0, t_span=[800,1200], args=(cD,[rhoDOC,rhoDON],), dense_output=False, method="Radau", max_step = np.inf, rtol=1e-8, atol = 1e-8, events=[])
 
