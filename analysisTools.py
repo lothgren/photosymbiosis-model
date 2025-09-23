@@ -9,7 +9,7 @@ import sympy as sp
 
 
 def symbDeath(t,y,cD,envFlows):
-    return y[1]-1e-10
+    return y[1]-1e-15
 symbDeath.terminal = True
 
 
@@ -60,6 +60,8 @@ def findOsc(y, tol = 1e-3):
         return [y[-1]], [y[-1]]
     
     maxIndex, _ = signal.find_peaks(y)
+    if len(maxIndex) == 0:
+        return [y[-1]], [y[-1]] 
     minIndex, _ = signal.find_peaks(-y)
     yMax, yMin = [], []
     for i in range(len(maxIndex)-1):
@@ -112,7 +114,7 @@ def plotBifur(para,span,envFlows,cons, bFunc = simpleBifur):
 
     Y = np.array(bFunc(para,span,envFlows,cons=cons))
     p, H, E = Y
-
+    
     
     fig, ax = plt.figure(), plt.subplot()
     ax.plot(p, E/H,".", color="gold", label = "$E/H$", ms=2, alpha=1)
@@ -161,10 +163,10 @@ if __name__ == "__main__":
         H, E, QE, QH, C = y
         return rhoDOC(t,y,cD) * 0.15
     
-    cons = [("s", 1.7), ("mH",0.03),("mE",0.3),("KN",0.05),("umax",0.03),("pmax",3),("CI",0.2)]
+    cons = [("s", 1.0), ("mH",0.03),("mE",0.3),("KN",0.05),("umax",0.03),("pmax",3),("CI",0.2)]
 
-    plotBifur("mE", [0.2,0.7], [rhoDOC,rhoDON], cons, bFunc=bifur)
-    plt.savefig("figs/bifur_mE_(s=1.7).svg")
+    plotBifur("umax", [0.01,0.06], [rhoDOC,rhoDON], cons, bFunc=bifur)
+    #plt.savefig("figs/bifur_s.svg")
     plt.show()
 
     

@@ -77,9 +77,7 @@ def _plotLimFac(t, y, cD, envFlows):
     ax3.set_xlabel("days")
     fig.supylabel(r"days$^{-1}$")
 
-def symbDeath(t,y,cD,envFlows):
-    return y[1]-1e-10
-symbDeath.terminal = True
+
 
 if __name__ == "__main__":
     import numpy as np
@@ -89,17 +87,17 @@ if __name__ == "__main__":
 
     def rhoDOC(t,y,cD):
         H, E, QE, QH, C = y
-        return 0.03 *3* (1-H/166)
+        return 0.03 *2.2* (1-H/166)
     def rhoDON(t,y,cD):
         H, E, QE, QH, C = y
         return rhoDOC(t,y,cD)*0.15
     
-    y0 = [60, 0.1, 0.04, 0.12, 0.1]
-    tEnd = 1200
-    cD = makeCons([("s", 1.70), ("mH",0.03),("mE",0.55),("KN",0.05),("umax",0.03),("pmax",3),("CI",0.2)])                  
-    sol = integ.solve_ivp(endo, y0=y0, t_span=[0,tEnd], args=(cD,[rhoDOC,rhoDON],), t_eval=np.linspace(9*tEnd//10,tEnd,tEnd*10), dense_output=False, vectorized=True, method="Radau", max_step = np.inf, rtol=1e-8, atol = 1e-8, events=[symbDeath])
+    y0 = [60, 6, 0.04, 0.12, 0.1]
+    tEnd = 500
+    cD = makeCons([("s", 1.7), ("mH",0.03),("mE",0.3),("KN",0.05),("umax",0.03),("pmax",3),("CI",0.2)])                  
+    sol = integ.solve_ivp(endo, y0=y0, t_span=[0,tEnd], args=(cD,[rhoDOC,rhoDON],), dense_output=False, vectorized=True, method="Radau", max_step = np.inf, rtol=1e-8, atol = 1e-8, events=[])
     print(sol)
-    print(sol.y_events[0][0][0])
+
 
 
     ### Plotting 

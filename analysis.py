@@ -11,7 +11,7 @@ def rhoDOC(t,y,cD):
         return 0.03 *3* (1-H/166)
 def rhoDON(t,y,cD):
     H, E, QE, QH, C = y
-    return rhoDOC(t,y,cD)*0.15 + cD["mH"]*QH*0.9
+    return rhoDOC(t,y,cD)*0.15
 
 
 ###### Plotting bifurcation diagrams
@@ -30,7 +30,7 @@ def stepWiseSim():
     ny0 = [sol1.y[0,-1], 1e-2, 0.04, sol1.y[3,-1], sol1.y[4,-1]]
     sol2 = integ.solve_ivp(endo, y0=ny0, t_span=[500,800], args=(cD,[rhoDOC,rhoDON],), dense_output=False, method="Radau", max_step = np.inf, rtol=1e-8, atol = 1e-8, events=[])
 
-    cD = makeCons([("s", 2), ("mH",0.03),("mE",0.3),("KN",0.05),("umax",0.03),("pmax",3),("CI",0.2)])
+    cD = makeCons([("s", 2.5), ("mH",0.03),("mE",0.3),("KN",0.05),("umax",0.03),("pmax",3),("CI",0.2)])
     ny0 = sol2.y[:,-1]
     sol3 = integ.solve_ivp(endo, y0=ny0, t_span=[800,1200], args=(cD,[rhoDOC,rhoDON],), dense_output=False, method="Radau", max_step = np.inf, rtol=1e-8, atol = 1e-8, events=[])
 
@@ -46,8 +46,6 @@ def stepWiseSim():
     
     ax1.axvline(500, color="k",dashes=(0.7,0.7),alpha=0.8)
     ax1.axvline(800, color="k",dashes=(0.7,0.7),alpha=0.8)
-    ax1.axvline(598, color="k",dashes=(0.7,0.7),alpha=0.8)
-    ax2.axvline(598, color="k",dashes=(0.7,0.7),alpha=0.8)
     ax2.axvline(500, color="k",dashes=(0.7,0.7),alpha=0.8)
     ax2.axvline(800, color="k",dashes=(0.7,0.7),alpha=0.8)
     ax1.text(500-2,1e-2,"E infection ->",ha="right")
