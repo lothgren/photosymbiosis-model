@@ -4,7 +4,8 @@ from model import *
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.integrate as integ
-from scipy import signal as signal
+import scipy.signal as signal
+import scipy.stats as stats
 import sympy as sp
 
 
@@ -30,12 +31,13 @@ def plotSim(t,y):
 
 
 def simpleBifur(para, span, envFlows, cons = []):
-    y0 = [60, 1, 0.04, 0.12, 0.1]
-    tEnd = 10000
+    y0 = [60, 1, 0.1, 0.1]
+    tEnd = 1000
     paraList = np.linspace(span[0],span[1],200)
 
     lastList = [[],[]]
     for paraValue in paraList:
+        print(paraValue)
         newCons = cons + [(para,paraValue)]
         sol, funcs = simSystem(y0,[0,tEnd],newCons,envFlows)
         lastList[0].append(sol.y[0,-1])
@@ -55,7 +57,7 @@ def findOsc(y, tol = 1e-3):
     bool: False if convergence to fixed point, True otherwise
     list: Max and min values as lists
     """
-    cv = np.std(y)/np.mean(y)  ## checking cv to see if no oscillations are occuring
+    cv = stats.variation(y)  ## checking cv to see if no oscillations are occuring
     if cv<=tol:
         return [y[-1]], [y[-1]]
     
@@ -69,8 +71,8 @@ def findOsc(y, tol = 1e-3):
         if abs(y[maxIndex[-i]]-y[maxIndex[-i-1]])<=tol:
             break
     for j in range(len(minIndex)-1):
-        yMin.append(y[minIndex[-i]])
-        if abs(y[minIndex[-i]]-y[minIndex[-i-1]])<=tol:
+        yMin.append(y[minIndex[-j]])
+        if abs(y[minIndex[-j]]-y[minIndex[-j-1]])<=tol:
             break
 
     return yMax, yMin
@@ -78,20 +80,23 @@ def findOsc(y, tol = 1e-3):
 
 
 def bifur(para,span, envFlows, cons = [], initVal = None): ## Under construction
-    y0 = initVal or [60, 1, 0.04, 0.12, 0.1]
-    tEnd = 10000
+    y0 = initVal or [60, 1, 0.12, 0.1]
+    tEnd = 2000
     paraList = np.linspace(span[0],span[1],200)
 
     minMax = [[], [], []]
     for paraValue in paraList:
+        print(paraValue)
+        ny0 = y0
         cD = makeCons(cons + [(para,paraValue)])
-        sol = integ.solve_ivp(endo, y0=y0, t_span=[0,tEnd], t_eval=np.linspace(9*tEnd//10,tEnd,tEnd*10), args=(cD,envFlows), 
+        sol = integ.solve_ivp(endo, y0=y0, t_span=[0,tEnd], t_eval=np.linspace(9*tEnd//10,tEnd,1000*tEnd//10), args=(cD,envFlows), 
                               dense_output=False, vectorized=True, method="Radau", max_step = np.inf, rtol=1e-8, atol = 1e-8, events=[symbDeath])
         
         if sol.status == 1:                #Added if statement to catch event edosymbiont exstinction
             minMax[0] = minMax[0] + [paraValue]
             minMax[1] = minMax[1] + [sol.y_events[0][0][0]]
             minMax[2] = minMax[2] + [sol.y_events[0][0][1]]
+            y0 = [60, 1, 0.12, 0.1]
             continue
 
         HMax, HMin = findOsc(sol.y[0,:])
@@ -105,7 +110,7 @@ def bifur(para,span, envFlows, cons = [], initVal = None): ## Under construction
             minMax[0] = minMax[0] + [paraValue]*ELen
             minMax[1] = minMax[1] + HMax + HMin + (ELen-HLen)*[np.nan]
             minMax[2] = minMax[2] + EMax + EMin 
-
+        y0 = sol.y[:,-1]
     return minMax
         
 
@@ -117,10 +122,10 @@ def plotBifur(para,span,envFlows,cons, bFunc = simpleBifur):
     
     
     fig, ax = plt.figure(), plt.subplot()
-    ax.plot(p, E/H,".", color="gold", label = "$E/H$", ms=2, alpha=1)
+    ax.plot(p, E/H,".", color="gold", label = "$E/H$", ms=3.5, alpha=1)
     twin = ax.twinx()
-    twin.plot(p, H, label = "$H$", color ="C0", marker=".", ls="", ms=2, alpha=1)
-    twin.plot(p, E, label = "$E$", color="C2", marker=".", ls="", ms=2, alpha=1)
+    twin.plot(p, H, label = "$H$", color ="C0", marker=".", ls="", ms=3.5, alpha=1)
+    twin.plot(p, E, label = "$E$", color="C2", marker=".", ls="", ms=3.5, alpha=1)
     
     ax.set_xlabel(para)
     ax.set_ylabel("E/H at equilibrium")
@@ -157,15 +162,15 @@ def plotFitnessVsE(H,QE,QH, cons=[]):
 
 if __name__ == "__main__":
     def rhoDOC(t,y,cD):
-        H, E, QE, QH, C = y
+        H, E, N, C = y
         return 0.03 *3* (1-H/166)
     def rhoDON(t,y,cD):
-        H, E, QE, QH, C = y
-        return rhoDOC(t,y,cD) * 0.15
+        H, E, N, C = y
+        return rhoDOC(t,y,cD) * 0.2
     
-    cons = [("s", 1.0), ("mH",0.03),("mE",0.3),("KN",0.05),("umax",0.03),("pmax",3),("CI",0.2)]
+    cons = [("s", 1), ("mH",0.03),("mE",0.10),("KNE",0.05), ("uEmax",0.06), ("KNH", 0.01), ("uHmax", 0.01),("pmax",0.5),("CI",0.2)]
 
-    plotBifur("umax", [0.01,0.06], [rhoDOC,rhoDON], cons, bFunc=bifur)
+    plotBifur("s", [1,2.5], [rhoDOC,rhoDON], cons, bFunc=simpleBifur)
     #plt.savefig("figs/bifur_s.svg")
     plt.show()
 
