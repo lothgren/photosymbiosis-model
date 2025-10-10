@@ -9,39 +9,104 @@ import scipy.stats as stats
 import sympy as sp
 
 
-def symbDeath(t,y,cD,envFlows):
-    return y[1]-1e-15
-symbDeath.terminal = True
-
-
-def simSystem(y0,tSpan,cons,envFlows):
+def simSystem(y0,tSpan,cons=[],tEval=None):
     cD  = makeCons(cons)
-    sol = integ.solve_ivp(endo, y0=y0, t_span=tSpan, args=(cD,envFlows), dense_output=False, method="Radau", max_step = np.inf, rtol=1e-8, atol = 1e-8, events=[symbDeath])
-    funcs = makeFuncs(sol.t,sol.y,cD,envFlows)
-    return sol, funcs
+    sol = integ.solve_ivp(endo, y0=y0, t_span=tSpan, t_eval=tEval, args=(cD,), dense_output=False, method="Radau", vectorized=True,
+                          max_step = np.inf, rtol=1e-8, atol = 1e-8, events=[symbDeath])
+    if sol.status == 1:
+        return sol.t_events[0][0], sol.y_events[0][0], makeFuncs(sol.t_events[0][0],sol.y_events[0][0],cD), cD
+    if sol.status == -1:
+        return None,"Nope",None,None
+    funcs = makeFuncs(sol.t,sol.y,cD)
+    return sol.t, sol.y, np.array(funcs), cD
 
 
 def makeDf(sol,funcs):
     return
 
 
-def plotSim(t,y):
-    """Ploting a simulation in matplotlib"""
-    return
+def plotSim(t,y,funcs):
+    """Ploting a given simulation in matplotlib"""
+    H, E, N, C = y
+    rE, rH, pE, muH, muE, uH, uE, rhoPhoto, rhoDIN, mH, mE, rhoDOC, rhoDON = funcs
+
+    fig, (ax1,ax2) = plt.subplots(nrows=2, ncols=1)
+    
+    ax1.semilogy(t,H,"C0",label="H")
+    ax1.semilogy(t,E,"C2",label="E")
+    twin1 = ax1.twinx()
+    twin1.plot(t,E/H,"C1", label = "$E/H$")
+    
+    twin2 = ax2.twinx()
+    twin2.plot(t,muE,"C2", label=r"$\mu_{E}$")
+    twin2.plot(t,pE,"C2", ls ="dashed", label=r"$p_{E}$")
+    ax2.plot(t,muH,"C0", label=r"$\mu_{H}$")
+    ax2.plot(t,rhoPhoto,"C3", ls ="dashed", label=r"$\rho_{photo}$")
+    ax2.plot(t,rhoDOC,"k", ls="dashed", label=r"$\rho_{Food}$")
 
 
-def simpleBifur(para, span, envFlows, cons = []):
-    y0 = [60, 1, 0.1, 0.1]
+    ax1.set_ylabel(r"mol C /m$^2$")
+    twin1.set_ylabel("E biomass/H iomass")
+    ax2.set_ylabel(r"d$^{-1}$")
+    twin2.set_ylabel(r"d$^{-1}$")
+    ax2.set_xlabel("d")
+
+
+    ax1.legend(loc="center left")
+    twin1.legend(loc="lower right")
+    ax2.legend(loc="upper right")
+    twin2.legend(loc="lower right")
+
+
+def plotCN(t,y,funcs,cD):
+    """Ploting nutrien and carbon flows for a given simulation"""
+    H, E, N, C = y
+    rE, rH, pE, muH, muE, uH, uE, rhoPhoto, rhoDIN, mH, mE, rhoDOC, rhoDON  = funcs
+
+    fig, (ax1,ax2,ax3) = plt.subplots(nrows=3, ncols=1)
+
+    ax1.plot(t,N,"C4", label = "$N$")
+    twin1 = ax1.twinx()
+    twin1.plot(t,C,"k",label="C")
+
+    ax2.plot(t,uE,"C2", ls ="dashed", label=r"$u_E$")
+    ax2.plot(t,uE*E/H,"C2", label=r"$u_E\frac{E}{H}$")
+    ax2.plot(t,rhoDIN,"C0", ls ="dashed", label=r"$\rho_{DIN}$")
+    ax2.plot(t,uH,"C0", label=r"$u_H$")
+    ax2.plot(t,cD["dC"]*(cD["CI"]-C),"C4", ls ="dashed", label=r"$\delta_N (N_I-N)$")
+ 
+    ax3.plot(t, rH,"C0", label=r"$r_{H}$")
+    ax3.plot(t, rE*E/H,"C0", ls ="dashed", label=r"$r_{E}\frac{E}{H}$")
+    ax3.plot(t, pE*E/H,"C2", ls ="dashed", label=r"$p_{E}\frac{E}{H}$")
+    ax3.plot(t, cD["dC"]*(cD["CI"]-C),"k", ls ="dashed", label=r"$\delta_C (C_I-C)$")
+
+    ax1.legend(loc="center left")
+    ax2.legend()
+    twin1.legend(loc="center right")
+    ax3.legend()
+
+    ax1.set_ylabel("mol N/mol C")
+    twin1.set_ylabel("mol CO$_2$/mol C")
+    ax2.set_ylabel("mol N/mol C/d")
+    ax3.set_ylabel("mol C/mol C/d")
+    ax3.set_xlabel("days")
+
+
+def simpleBifur(para, span, cons = []):    ## NB Modified simSystem before 
+    y0 = [60, 1, 0.1, 0.1]                 ## Add y0 argument
     tEnd = 1000
     paraList = np.linspace(span[0],span[1],200)
 
-    lastList = [[],[]]
+    lastList = [[],[],[]]
     for paraValue in paraList:
         print(paraValue)
         newCons = cons + [(para,paraValue)]
-        sol, funcs = simSystem(y0,[0,tEnd],newCons,envFlows)
+        sol, funcs = simSystem(y0,[0,tEnd],newCons)
         lastList[0].append(sol.y[0,-1])
         lastList[1].append(sol.y[1,-1])
+        lastList[2].append(funcs[7][-1])
+
+        y0 = sol.y[:,-1]
         
     return [paraList] + lastList
 
@@ -78,100 +143,90 @@ def findOsc(y, tol = 1e-3):
     return yMax, yMin
     
 
-
-def bifur(para,span, envFlows, cons = [], initVal = None): ## Under construction
-    y0 = initVal or [60, 1, 0.12, 0.1]
+def bifur(para,span, cons = [], initVal = None):
+    y0 = initVal or [60, 0.001, 0.01, 0.14]
     tEnd = 2000
     paraList = np.linspace(span[0],span[1],200)
 
-    minMax = [[], [], []]
+    minMax = [[], [], [], []]
     for paraValue in paraList:
         print(paraValue)
-        ny0 = y0
-        cD = makeCons(cons + [(para,paraValue)])
-        sol = integ.solve_ivp(endo, y0=y0, t_span=[0,tEnd], t_eval=np.linspace(9*tEnd//10,tEnd,1000*tEnd//10), args=(cD,envFlows), 
-                              dense_output=False, vectorized=True, method="Radau", max_step = np.inf, rtol=1e-8, atol = 1e-8, events=[symbDeath])
+        newCons = cons + [(para,paraValue)]
+        try:
+            t, y, funcs, cD = simSystem(y0,[0,tEnd],newCons,tEval=np.linspace(9*tEnd//10, tEnd, tEnd*100//10))
+        except:
+            continue
         
-        if sol.status == 1:                #Added if statement to catch event edosymbiont exstinction
+        if np.isscalar(y[0]):
             minMax[0] = minMax[0] + [paraValue]
-            minMax[1] = minMax[1] + [sol.y_events[0][0][0]]
-            minMax[2] = minMax[2] + [sol.y_events[0][0][1]]
-            y0 = [60, 1, 0.12, 0.1]
+            minMax[1] = minMax[1] + [y[0]]
+            minMax[2] = minMax[2] + [y[1]]
+            minMax[3] = minMax[3] + [funcs[7]]
+            y0 = y
             continue
 
-        HMax, HMin = findOsc(sol.y[0,:])
-        EMax, EMin = findOsc(sol.y[1,:])
+
+        HMax, HMin = findOsc(y[0,:])
+        EMax, EMin = findOsc(y[1,:])
+        photoMax, photoMin = findOsc(funcs[7])
         HLen, ELen = len(HMax)+len(HMin), len(EMax)+len(EMin)
-        if HLen >= ELen:
-            minMax[0] = minMax[0] + [paraValue]*HLen
-            minMax[1] = minMax[1] + HMax + HMin
-            minMax[2] = minMax[2] + EMax + EMin + (HLen-ELen)*[np.nan]
-        else:
-            minMax[0] = minMax[0] + [paraValue]*ELen
-            minMax[1] = minMax[1] + HMax + HMin + (ELen-HLen)*[np.nan]
-            minMax[2] = minMax[2] + EMax + EMin 
-        y0 = sol.y[:,-1]
+        photoLen  = len(photoMax)+len(photoMin)
+
+        minMax[0] = minMax[0] + [paraValue]*max(HLen,ELen,photoLen)
+        minMax[1] = minMax[1] + HMax + HMin + max(0,ELen-HLen,photoLen-HLen)*[np.nan]
+        minMax[2] = minMax[2] + EMax + EMin + max(0,HLen-ELen,photoLen-ELen)*[np.nan]
+        minMax[3] = minMax[3] + photoMax + photoMin + max(0,ELen-photoLen,HLen-photoLen)*[np.nan]
+
+        y0 = y[:,-1] + 1e-4
+
     return minMax
-        
 
 
-def plotBifur(para,span,envFlows,cons, bFunc = simpleBifur):
-
-    Y = np.array(bFunc(para,span,envFlows,cons=cons))
-    p, H, E = Y
+def saveBifur(para, Y):
+    fig, tempAx = plt.subplots()
+    p, H, E, rhoPhoto = Y
+    tempAx.plot(p, rhoPhoto,".", color="C3", label = r"$\rho_{photo}$", ms=4.5, alpha=1)
+    tempTwin = tempAx.twinx()
+    tempTwin.plot(p, H, label = "$H$", color ="C0", marker=".", ls="", ms=3.5, alpha=1)
+    tempTwin.plot(p, E, label = "$E$", color="C2", marker=".", ls="", ms=3.5, alpha=1)
     
+    tempAx.set_xlabel(para)
+    tempAx.set_ylabel(r"$\rho_{photo}$ at equilibrium")
+    tempTwin.set_ylabel("$E$ and $H$ (mol C/m$^2$) at equilibrium")
+    tempAx.legend(loc="center left")
+    tempTwin.legend(loc="center right")
+    plt.savefig("figs/bifur_" + para + ".png")
+    plt.close()
+
+
+def plotBifur(para,span,cons, initVal=None, bFunc = simpleBifur, ax = None, save = False):
+
+    Y = np.array(bFunc(para,span,initVal=initVal,cons=cons))
+    p, H, E, rhoPhoto = Y
     
-    fig, ax = plt.figure(), plt.subplot()
-    ax.plot(p, E/H,".", color="gold", label = "$E/H$", ms=3.5, alpha=1)
+    if ax==None:
+        fig, ax = plt.subplots()
+    if save:
+        saveBifur(para,Y)
+
+    ax.plot(p, rhoPhoto,".", color="C3", label = r"$\rho_{photo}$", ms=4.5, alpha=1)
     twin = ax.twinx()
-    twin.plot(p, H, label = "$H$", color ="C0", marker=".", ls="", ms=3.5, alpha=1)
+    twin.plot(p, H, label = "$H$", color="C0", marker=".", ls="", ms=3.5, alpha=1)
     twin.plot(p, E, label = "$E$", color="C2", marker=".", ls="", ms=3.5, alpha=1)
     
     ax.set_xlabel(para)
-    ax.set_ylabel("E/H at equilibrium")
-    twin.set_ylabel("$E$ and $H$ (mol C/m$^2$) at equilibrium")
     ax.legend(loc="center left")
     twin.legend(loc="center right")
 
 
-def plotFitnessVsE(H,QE,QH, cons=[]):
-    N = 1000
-    E = np.linspace(0,20,N)
-    cD = makeCons(cons)
-
-    fig, ax = plt.figure(), plt.subplot()
-    for i in range(len(H)):
-        y = np.array([E, H[i]*np.ones(N),QE*np.ones(N),QH*np.ones(N)])
-        pH, pE, mH, mE, *dummy = makeFuncs(np.zeros(N),y,cD,envFlows)
-
-        ax.plot(E,pH-mH, "C0", dashes=[1+i,i], alpha=1-2*i/10)
-        ax.plot(E,pE-mE, "C2", dashes=[1+i,i], alpha=1-2*i/10)
-
-    plt.arrow(8,0.02,4.7-8,0,width=0.002,length_includes_head=True, head_length=1,color="k")
-    plt.text(4.7,0.025,"E fit. decreases")
-
-    ax.hlines(0,-1,21,"k",linestyles="dashed",alpha=0.2)
-    ax.set_ylim([min(pH)-0.05,max(pH)+0.1])
-    ax.set_title(f"$e_H=${round(cD["s"]*(1-cD["QHmin"]/QH),2)}, $e_E=${round((1-cD["QEmin"]/QE),2)}")
-    ax.set_ylabel("Fitness")
-    ax.set_xlabel("E")
-    ax.legend(["H fitness", "E fitness"])
-    plt.show()
+    
 
 
 
 if __name__ == "__main__":
-    def rhoDOC(t,y,cD):
-        H, E, N, C = y
-        return 0.03 *3* (1-H/166)
-    def rhoDON(t,y,cD):
-        H, E, N, C = y
-        return rhoDOC(t,y,cD) * 0.2
-    
-    cons = [("s", 1), ("mH",0.03),("mE",0.10),("KNE",0.05), ("uEmax",0.06), ("KNH", 0.01), ("uHmax", 0.01),("pmax",0.5),("CI",0.2)]
+    cons = []
 
-    plotBifur("s", [1,2.5], [rhoDOC,rhoDON], cons, bFunc=simpleBifur)
-    #plt.savefig("figs/bifur_s.svg")
+    plotBifur("pmax", [0.2,1.5], cons, initVal=None,bFunc=bifur, save=False)
     plt.show()
 
     

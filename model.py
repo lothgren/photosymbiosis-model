@@ -5,82 +5,100 @@ import numpy as np
 
 
 def makeCons(changes=[]):
-    dict = {"s": 1, "a":0.9, "b": 0.5, "pmax": 3, "KCO_2": 0.01, "d": 0.5, "CI": 0.1, "mE": 0.3, "mH": 0.03, 
-            "KNE": 0.1, "uEmax" : 0.07, "KNH": 0.1, "uHmax" : 0.07, "QE": 0.15, "QH": 0.15, "emax": 0.5}
+    dict = {"s": 1, "to": 1, "b": 0.5, "pmax": 0.5, "KCO_2": 0.01, "dC": 0.5, "CI": 0.1, "mE": 0.05, "mH": 0.03, "rho0": 0.03*3, "HCap": 166,
+            "dN": 0.2, "NI": 0.005, "KNE": 0.05, "uEmax" : 0.04, "KNH": 0.01, "uHmax" : 0.04, "QE": 0.15, "QH": 0.15, "QFood": 0.15}
 
     for change in changes:
         dict[change[0]] = change[1]
     return dict
 
 
-def makeFuncs(t, y, cD, envFlows):  
+def makeFuncs(t, y, cD):  
     H, E, N, C = y
-    rhoDOC,rhoDON = envFlows
+    rhoDOC = np.maximum(0,cD["rho0"]*(1-H/cD["HCap"]))
+    rhoDON = rhoDOC*cD["QFood"]
 
-    a = cD["a"]
-    b = cD["b"] # np.maximum(np.sin(2*np.pi*t),0)
+    b = cD["b"]
+
+    mH = cD["mH"]*cD["to"] + H*0
+    mE = cD["mE"]*cD["to"] + H*0
 
     uH = cD["uHmax"] *(N)/( cD["KNH"] + N )
     uE = cD["uEmax"] *(N)/( cD["KNE"] + N )
 
-    vE = cD["pmax"] * C/(cD["KCO_2"] + C)
-    nE = (uE/vE)/cD["QE"]
+    pE = cD["pmax"] * C/(cD["KCO_2"] + C)
+    nE = (uE/pE)/cD["QE"]
     eE  = np.minimum(1/(cD["s"]+1), nE)
 
-    rhoPhoto = (1-(1+cD["s"])*eE)*vE*E/H
-    n = ( (rhoDON(t,y,cD) + uH)/(rhoDOC(t,y,cD)+rhoPhoto) )/cD["QH"]
-    eH  = np.minimum(1/(cD["s"]+1), n)
+    rhoPhoto = (1-(1+cD["s"])*eE)*pE*E/H
+    nH = ( (rhoDON + uH)/(rhoDOC+rhoPhoto) )/cD["QH"]
+    eH  = np.minimum(1/(cD["s"]+1), nH)
 
-    vH = b* ( cD["s"]*eH*(rhoDOC(t,y,cD) + rhoPhoto) + a*cD["mH"] + cD["s"]*eE*vE*E/H )
-    rhoDIN = (1-eH/n)*(rhoDON(t,y,cD) + uH) + a*cD["mH"]*cD["QH"]
+    rH = b* ( cD["s"]*eH*(rhoDOC + rhoPhoto) + mH)
+    rE = b* ( cD["s"]*eE*pE + mE )
 
-    muH = eH*(rhoDOC(t,y,cD) + rhoPhoto)
-    muE = eE*vE
+    rhoDIN = (1-eH/nH)*(rhoDON + uH) + mH*cD["QH"] + mE*cD["QE"]*E/H
 
-
-
-    return vE, vH, muH, muE, uH, uE, rhoPhoto, rhoDIN
+    muH = eH*(rhoDOC + rhoPhoto)
+    muE = eE*pE
 
 
-def endo(t, y, cD, envFlows):
+    return rE, rH, pE, muH, muE, uH, uE, rhoPhoto, rhoDIN, mH, mE, rhoDOC, rhoDON
+
+
+def endo(t, y, cD):
     H, E, N, C = y
-    vE, vH, muH, muE, uH, uE, rhoPhoto, rhoDIN  = makeFuncs(t,y,cD,envFlows)
+    rE, rH, pE, muH, muE, uH, uE, rhoPhoto, rhoDIN, mH, mE, rhoDOC, rhoDON  = makeFuncs(t,y,cD)
 
-    dH = (muH-cD["mH"])*H
-    dE = (muE-cD["mE"])*E
+    dH = (muH-mH)*H
+    dE = (muE-mE)*E
 
-    dN = rhoDIN - uH - uE*E/H - 0.1*N
-    dC  = vH - vE*E/H + cD["d"]*(cD["CI"]-C)
+    dN = rhoDIN - uH - uE*E/H + cD["dN"]*(cD["NI"]-N)
+    dC  = rH + rE*E/H - pE*E/H + cD["dC"]*(cD["CI"]-C)
 
     return [dH,dE,dN,dC]
 
 
-def _plotLimFac(t, y, cD, envFlows):
+def symbDeath(t,y,cD):
+    return y[1]-1e-10
+symbDeath.terminal = True
+
+def loadStop(t,y,cD):
+    return 2-y[1]/y[0]
+loadStop.terminal = True
+
+
+def _plotLimFac(t, y, cD):
     H, E,  N, C = y
-    t = sol.t
-    rhoDOC, rhoDON = envFlows
-    vE, vH, muH, muE, uH, uE, rhoPhoto, rhoDIN  = makeFuncs(t,y,cD,envFlows)
+    rE, rH, pE, muH, muE, uH, uE, rhoPhoto, rhoDIN, mH, mE, rhoDOC, rhoDON  = makeFuncs(t,y,cD)
 
     fig, (ax1,ax2,ax3) = plt.subplots(nrows=3, ncols=1)
 
-    ax1.plot(t,uE,"g--", label=r"$u_E$")
-    ax1.plot(t,uE*E/H,"g", label=r"$u_E\frac{E}{H}$")
-    ax1.plot(t,uH,"b", label="$u_H$")
-    ax1.plot(t,rhoDIN,"b--", label=r"$\rho_{DIN}$")
+    ax1.plot(t,N,"C0", label = "$N$")
+    twin1 = ax1.twinx()
+    twin1.plot(t,C,"k--",label="C")
 
-    ax2.plot(t,muE,"g", label=r"$\mu_{E}$")
-    ax2.plot(t,vE,"g--", label=r"$v_{E}$")
+    ax2.plot(t,uE,"g--", label=r"$u_E$")
+    ax2.plot(t,uE*E/H,"g", label=r"$u_E\frac{E}{H}$")
+    ax2.plot(t,rhoDIN-uH,"b", label=r"$\rho_{DIN}-u_H$")
+    ax2.plot(t,cD["dN"]*(cD["NI"]-N), "r--", label=r"$\delta_N (N_I-N)$")
+ 
+    ax3.plot(t, rH,"b", label=r"$r_{H}$")
+    ax3.plot(t, rE*E/H,"b--", label=r"$r_{E}\frac{E}{H}$")
+    ax3.plot(t, pE*E/H,"g--", label=r"$p_{E}\frac{E}{H}$")
+    ax3.plot(t, cD["dC"]*(cD["CI"]-C),"k--", label=r"$\delta_C (C_I-C)$")
 
-    ax3.plot(t,muH,"b", label=r"$\mu_{H}$")
-    ax3.plot(t,rhoPhoto,"g--", label=r"$\rho_{photo}$")
-    ax3.plot(t,rhoDOC(sol.t,sol.y,cD),"k--", label=r"$\rho_{Food}$")
-
-    ax1.legend()
+    ax1.legend(loc="upper right")
+    twin1.legend(loc="lower right")
     ax2.legend()
     ax3.legend()
 
+    ax1.set_ylabel("mol N/mol C")
+    twin1.set_ylabel("mol CO$_2$/mol C")
+    ax2.set_ylabel("mol N/mol C/d")
+    ax3.set_ylabel("mol C/mol C/d")
     ax3.set_xlabel("days")
-    fig.supylabel(r"days$^{-1}$")
+    
 
 
 
@@ -89,28 +107,20 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
     import scipy.integrate as integ
     import scipy.signal as signal
-
-    def rhoDOC(t,y,cD):
-        H, E, N, C = y
-        return 0.03 *3* (1-H/166)
-    def rhoDON(t,y,cD):
-        H, E, N, C = y
-        return rhoDOC(t,y,cD)*0.15
     
-    y0 = [60, 0.01, 0.02, 0.1]
-    tEnd = 800
-    cD = makeCons([("s", 1.5), ("mH",0.03),("mE",0.10),("KNE",0.01), ("uEmax",0.06), ("KNH", 0.01), ("uHmax", 0.01),("pmax",0.5),("CI",0.2)])              
-    sol = integ.solve_ivp(endo, y0=y0, t_span=[0,tEnd], args=(cD,[rhoDOC,rhoDON],), dense_output=False, vectorized=True, method="Radau", max_step = np.inf, rtol=1e-8, atol = 1e-8, events=[])
+    y0 = [17,0.0001,0.05,0.16]  #[1.56068376e+02, 2.58806457e+01, 1.15384615e-02, 6.07692308e-02]
+    tEnd = 500
+    cD = makeCons([("pmax",0.5),("KNE",0.004)])
+    sol = integ.solve_ivp(endo, y0=y0, t_span=[0,tEnd], args=(cD,), dense_output=False, vectorized=True, method="Radau", max_step = np.inf, rtol=1e-8, atol = 1e-8, events=[])
     print(sol)
-
-
+    print(sol.y[:,-1])
 
     ### Plotting 
-    H, E, QH, C = sol.y
-    vE, vH, muH, muE, uH, uE, rhoPhoto, rhoDIN  = makeFuncs(sol.t,sol.y,cD,[rhoDOC,rhoDON])
+    H, E, N, C = sol.y
+    rE, rH, pE, muH, muE, uH, uE, rhoPhoto, rhoDIN, mH, mE, rhoDOC, rhoDON = makeFuncs(sol.t,sol.y,cD)
     t = sol.t
 
-    fig, (ax1,ax2,ax3) = plt.subplots(nrows=3, ncols=1)
+    fig, (ax1,ax2) = plt.subplots(nrows=2, ncols=1)
     
     if y0[1]!=0:
         ax1.semilogy(t,E,"C2",label="E")
@@ -118,27 +128,26 @@ if __name__ == "__main__":
     twin1 = ax1.twinx()
     twin1.plot(t,E/H,"gold", label = "$E/H$")
     
-    ax2.plot(t,QH,"C0", label = "$N$")
     twin2 = ax2.twinx()
-    twin2.plot(t,C,"k--",label="C")
- 
-    ax3.plot(t, vH,"b", label=r"$v_{H}$")
-    ax3.plot(t, vE*E/H,"g--", label=r"$v_{E}\frac{E}{H}$")
-    ax3.plot(t, cD["d"]*(cD["CI"]-C),"k--", label=r"$\delta (C_I-C)$")
+    twin2.plot(t,muE,"g", label=r"$\mu_{E}$")
+    twin2.plot(t,pE,"g--", label=r"$p_{E}$")
+    ax2.plot(t,muH,"b", label=r"$\mu_{H}$")
+    ax2.plot(t,rhoPhoto,"r--", label=r"$\rho_{photo}$")
+    ax2.plot(t,rhoDOC,"k--", label=r"$\rho_{Food}$")
+
 
     ax1.set_ylabel(r"mol C /m$^2$")
     twin1.set_ylabel("E biomass/H iomass")
-    ax2.set_ylabel("mol N/mol C")
-    twin2.set_ylabel("mol $CO_2$/H biomass")
-    ax3.set_ylabel(r"C uptake (d$^{-1}$)")
-    ax3.set_xlabel("d")
+    ax2.set_ylabel(r"d$^{-1}$")
+    twin2.set_ylabel(r"d$^{-1}$")
+    ax2.set_xlabel("d")
 
 
     ax1.legend()
     twin1.legend()
     ax2.legend(loc="upper right")
     twin2.legend(loc="lower right")
-    ax3.legend()
 
-    _plotLimFac(t, sol.y, cD, [rhoDOC,rhoDON])
+
+    _plotLimFac(t, sol.y, cD)
     plt.show()
