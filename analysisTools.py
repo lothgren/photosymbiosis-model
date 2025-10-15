@@ -6,9 +6,12 @@ import matplotlib.pyplot as plt
 import scipy.integrate as integ
 import scipy.signal as signal
 import scipy.stats as stats
+import scipy.differentiate as diff
+import scipy.linalg as la
+import scipy.optimize as opt
 import sympy as sp
 
-
+##### Simulation and basic plotting ############################
 def simSystem(y0,tSpan,cons=[],tEval=None):
     cD  = makeCons(cons)
     sol = integ.solve_ivp(endo, y0=y0, t_span=tSpan, t_eval=tEval, args=(cD,), dense_output=False, method="Radau", vectorized=True,
@@ -28,7 +31,7 @@ def makeDf(sol,funcs):
 def plotSim(t,y,funcs):
     """Ploting a given simulation in matplotlib"""
     H, E, N, C = y
-    rE, rH, pE, muH, muE, uH, uE, rhoPhoto, rhoDIN, mH, mE, rhoDOC, rhoDON = funcs
+    rE, rH, pE, muH, muE, uH, uE, rhoPhoto, rhoDIN, rhoDOC, rhoDON, eH, eE = funcs
 
     fig, (ax1,ax2) = plt.subplots(nrows=2, ncols=1)
     
@@ -61,7 +64,7 @@ def plotSim(t,y,funcs):
 def plotCN(t,y,funcs,cD):
     """Ploting nutrien and carbon flows for a given simulation"""
     H, E, N, C = y
-    rE, rH, pE, muH, muE, uH, uE, rhoPhoto, rhoDIN, mH, mE, rhoDOC, rhoDON  = funcs
+    rE, rH, pE, muH, muE, uH, uE, rhoPhoto, rhoDIN, rhoDOC, rhoDON, eH, eE  = funcs
 
     fig, (ax1,ax2,ax3) = plt.subplots(nrows=3, ncols=1)
 
@@ -92,6 +95,103 @@ def plotCN(t,y,funcs,cD):
     ax3.set_xlabel("days")
 
 
+##### Symbolic function ####################################################
+def checkFixedPoint(nLimH, nLimE, paraValueList=[]):
+    """Function uses symbolic computation to find fixed points for a given stat (H and/or E under nutrient limitation)"""
+    H, E, N, C = sp.symbols("H E N C", real=True)
+    s, b, pmax, KCO2, delC, CI, mE, mH, rho0, HCap, delN, NI, KNE, uEmax, KNH, uHmax, Q = sp.symbols("s b pmax KCO2 dC CI mE mH rho0 HCap dN NI KNE uEmax KNH uHmax Q", real=True)
+    paraValues = {s: 1, b: 0.5, pmax: 0.7, KCO2: 0.01, delC: 0.5, CI: 0.1, mE: 0.1, mH: 0.03, rho0: 0.03*3, HCap: 166, delN: 0.2, NI:0.005, KNE: 0.05, uEmax : 0.05, KNH: 0.01, uHmax : 0.04, Q: 0.15}
+    for pValue in paraValueList:
+        paraValues[pValue[0]] = pValue[1]
+
+    [dH,dE,dN,dC] = endoSymbolic(nLimH,nLimE)
+    dfSubbed = [dH.subs(paraValues),dE.subs(paraValues),dN.subs(paraValues),dC.subs(paraValues)]
+    fixedPoints = sp.solve(dfSubbed,[H, E, N, C])
+    print(fixedPoints)
+    return fixedPoints
+
+
+def checkSymbolicStab(yStar,state, paraValues, printEig = False):
+    """Need some more work I guess"""
+    F = sp.Matrix(endoSymbolic(state[0],state[1])).subs(paraValues)
+    J = F.jacobian([H,E,N,C])
+
+    dict, keys = {}, [H,E,N,C]
+    for i in range(len(yStar)):
+        dict[keys[i]] = yStar[i]
+    
+    print(np.array(J.subs(dict), dtype=np.float64))
+    eig = J.subs(dict).eigenvals()
+    stab, numDir = True, 0
+
+    for val, mult in eig.items():
+        if printEig:
+            print("Eigenvalue:", sp.N(val))
+        if sp.re(sp.N(val)) > 0:
+            stab = False
+            numDir += 1
+
+    return stab, numDir
+
+
+
+##### Bifurcation diagrams by numerically solving for the fixed point #####
+def checkStab(yStar,cD):
+    """Numerically checking stability of fixed point
+    
+    Input
+    yStar: array-like fixed point
+    cD: dict or dataframe of parametervalues
+    
+    Output
+    Bool: True if stable, False otherwise"""
+    
+    res = diff.jacobian(lambda y: endo(0,y,cD), yStar, order=10, initial_step=0.1, maxiter=100, tolerances={"rtol":1e-12, "atol":1e-12} )
+    eig, _ = la.eig(res.df, check_finite=False)
+    #print(res.df)
+    #print(f"eigenvalues: {eig}")
+    if all(val.real<0 for val in eig):
+        return True
+    else:
+        return False
+
+
+def numBifur(para,pValues,y0,cons=[]): 
+    fixList = []
+    for p in pValues:
+        cD = makeCons(cons+[(para,p)])
+        sol = opt.root(lambda y: endo(0,y,cD), y0, method="hybr", tol=1e-12, options={"xtol":1e-12,"maxfev":0,"eps":0.1})
+        if all(val>=-1e-10 for val in sol.x):
+            stab = checkStab(sol.x, cD)
+            fixList.append( np.concatenate([ [p],y0,[stab] ]) )
+        print(f"{para}: {p}, H: {round(sol.x[0],3)}, E: {round(sol.x[1],10)}, N: {round(sol.x[2],10)}, C: {round(sol.x[3],10)}, stable = {stab}")
+        y0 = sol.x
+    return np.array(fixList)
+
+
+def makeNumBifur(para,span):
+    fixedPoints = checkFixedPoint(0,1) + checkFixedPoint(0,0)
+    standardVal = makeCons()[para]
+    step = (span[1]-span[0])/300
+    mList, m = ["s", "o", "^", "H"], 0
+    for i in range(len(fixedPoints)):
+        fp = np.array(fixedPoints[i],dtype="float64")
+        if all(val>0 for val in fp):
+            for j in range(2):
+                pList = np.arange(standardVal,span[j],(-1)**(j+1)*step)
+                fixList = numBifur(para,pList,fp)
+                for k in range(0,len(fixList[:,0]),4):
+                    if j == 1 and k == 0: continue
+                    c = None if fixList[k,-1] else "red" 
+                    plt.plot(fixList[k,0], fixList[k,1], color = "C0", mec = c, marker = mList[m], ms= 5.0, alpha=0.6, ls="", label = "$H^*$")
+                    plt.plot(fixList[k,0], fixList[k,2], color = "C2", mec = c, marker = mList[m], ms= 5.0, alpha=0.6, ls="", label = "$E^*$")
+            m += 1
+    plt.xlabel(para)
+    plt.ylabel("$H^*$, $E^*$ (mol C/m$^2$)")
+    plt.savefig("figs2/num_bifur_" + para + ".png")
+
+
+##### Bifurcation diagrams by simulations #####################################
 def simpleBifur(para, span, cons = []):    ## NB Modified simSystem before 
     y0 = [60, 1, 0.1, 0.1]                 ## Add y0 argument
     tEnd = 1000
@@ -200,7 +300,6 @@ def saveBifur(para, Y):
 
 
 def plotBifur(para,span,cons, initVal=None, bFunc = simpleBifur, ax = None, save = False):
-
     Y = np.array(bFunc(para,span,initVal=initVal,cons=cons))
     p, H, E, rhoPhoto = Y
     
@@ -220,13 +319,12 @@ def plotBifur(para,span,cons, initVal=None, bFunc = simpleBifur, ax = None, save
 
 
     
-
+def plotAllBifur():
+    bifurList = { "s": [0.9,1.5], "to": [0.5,2], "pmax": [0.01,1.5], "uEmax": [0.015,0.09], "uHmax": [0.015,0.09], 
+                 "dC": [0.0,0.7], "CI": [0.0,0.15], "dN": [0.0,0.7], "NI": [0.0,0.02]}
 
 
 if __name__ == "__main__":
-    cons = []
-
-    plotBifur("pmax", [0.2,1.5], cons, initVal=None,bFunc=bifur, save=False)
+    makeNumBifur("KNE", [0.0001,0.15])
     plt.show()
-
     

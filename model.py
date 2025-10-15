@@ -2,61 +2,96 @@
 ## Version 3.01, includes carbon pool and assumes fixed cell-quota for host and a dynamic DIN pool
 import matplotlib.pyplot as plt
 import numpy as np
+import sympy as sp
 
 
 def makeCons(changes=[]):
-    dict = {"s": 1, "to": 1, "b": 0.5, "pmax": 0.5, "KCO_2": 0.01, "dC": 0.5, "CI": 0.1, "mE": 0.05, "mH": 0.03, "rho0": 0.03*3, "HCap": 166,
-            "dN": 0.2, "NI": 0.005, "KNE": 0.05, "uEmax" : 0.04, "KNH": 0.01, "uHmax" : 0.04, "QE": 0.15, "QH": 0.15, "QFood": 0.15}
+    dict = {"s": 1, "to": 1, "b": 0.5, "pmax": 0.7, "KCO_2": 0.01, "dC": 0.5, "CI": 0.1, "mE": 0.10, "mH": 0.03, "rho0": 0.03*3, "HCap": 166,
+            "dN": 0.2, "NI": 0.005, "KNE": 0.05, "uEmax" : 0.05, "KNH": 0.01, "uHmax" : 0.04, "QE": 0.15, "QH": 0.15, "QFood": 0.15}
 
     for change in changes:
         dict[change[0]] = change[1]
     return dict
 
 
+def minApprox(a,b,e=1e-4):
+    return ( a+b - ((a-b)**2+e)**(1/2) )/2
+
+
 def makeFuncs(t, y, cD):  
     H, E, N, C = y
-    rhoDOC = np.maximum(0,cD["rho0"]*(1-H/cD["HCap"]))
+    rhoDOC = cD["rho0"]*(1-H/cD["HCap"])  #np.maximum(0,cD["rho0"]*(1-H/cD["HCap"]))
     rhoDON = rhoDOC*cD["QFood"]
-
-    b = cD["b"]
-
-    mH = cD["mH"]*cD["to"] + H*0
-    mE = cD["mE"]*cD["to"] + H*0
 
     uH = cD["uHmax"] *(N)/( cD["KNH"] + N )
     uE = cD["uEmax"] *(N)/( cD["KNE"] + N )
 
     pE = cD["pmax"] * C/(cD["KCO_2"] + C)
     nE = (uE/pE)/cD["QE"]
-    eE  = np.minimum(1/(cD["s"]+1), nE)
+    eE  = minApprox(1/(cD["s"]+1), nE)    #np.minimum(1/(cD["s"]+1), nE)
 
     rhoPhoto = (1-(1+cD["s"])*eE)*pE*E/H
     nH = ( (rhoDON + uH)/(rhoDOC+rhoPhoto) )/cD["QH"]
-    eH  = np.minimum(1/(cD["s"]+1), nH)
+    eH  = minApprox(1/(cD["s"]+1), nH)     #np.minimum(1/(cD["s"]+1), nH)
 
-    rH = b* ( cD["s"]*eH*(rhoDOC + rhoPhoto) + mH)
-    rE = b* ( cD["s"]*eE*pE + mE )
+    rH = cD["b"]* ( cD["s"]*eH*(rhoDOC + rhoPhoto) + cD["mH"]*cD["to"])
+    rE = cD["b"]* ( cD["s"]*eE*pE + cD["mE"]*cD["to"] )
 
-    rhoDIN = (1-eH/nH)*(rhoDON + uH) + mH*cD["QH"] + mE*cD["QE"]*E/H
+    rhoDIN = (1-eH/nH)*(rhoDON + uH) + cD["mH"]*cD["to"]*cD["QH"] + cD["mE"]*cD["to"]*cD["QE"]*E/H
 
     muH = eH*(rhoDOC + rhoPhoto)
     muE = eE*pE
 
-
-    return rE, rH, pE, muH, muE, uH, uE, rhoPhoto, rhoDIN, mH, mE, rhoDOC, rhoDON
+    return rE, rH, pE, muH, muE, uH, uE, rhoPhoto, rhoDIN, rhoDOC, rhoDON, eH, eE
 
 
 def endo(t, y, cD):
     H, E, N, C = y
-    rE, rH, pE, muH, muE, uH, uE, rhoPhoto, rhoDIN, mH, mE, rhoDOC, rhoDON  = makeFuncs(t,y,cD)
+    rE, rH, pE, muH, muE, uH, uE, rhoPhoto, rhoDIN, rhoDOC, rhoDON, eH, eE  = makeFuncs(t,y,cD)
 
-    dH = (muH-mH)*H
-    dE = (muE-mE)*E
+    dH = (muH-cD["mH"]*cD["to"])*H
+    dE = (muE-cD["mE"]*cD["to"])*E
 
     dN = rhoDIN - uH - uE*E/H + cD["dN"]*(cD["NI"]-N)
     dC  = rH + rE*E/H - pE*E/H + cD["dC"]*(cD["CI"]-C)
 
     return [dH,dE,dN,dC]
+
+
+def endoSymbolic(nLimH = False, nLimE = True):
+    H, E, N, C = sp.symbols("H E N C", real=True)
+    s, b, pmax, KCO2, delC, CI, mE, mH, rho0, HCap, delN, NI, KNE, uEmax, KNH, uHmax, Q = sp.symbols("s b pmax KCO2 dC CI mE mH rho0 HCap dN NI KNE uEmax KNH uHmax Q", real=True)
+
+    rhoDOC = rho0*(1-H/HCap)
+    rhoDON = rhoDOC*Q
+
+    uH = uHmax *(N)/( KNH + N )
+    uE = uEmax *(N)/( KNE + N )
+
+    pE = pmax * C/(KCO2 + C)
+    nE = (uE/pE)/Q
+    eE = nE if nLimE else 1/(1+s)
+
+    rhoPhoto = (1-(1+s)*eE)*pE*E/H
+    nH = ( (rhoDON + uH)/(rhoDOC+rhoPhoto) )/Q
+    eH = nH if nLimH else 1/(1+s)  # sp.Min(1/(s+1), nH)
+
+    rH = b* ( s*eH*(rhoDOC + rhoPhoto) + mH)
+    rE = b* ( s*eE*pE + mE )
+
+    rhoDIN = (1-eH/nH)*(rhoDON + uH) + mH*Q + mE*Q*E/H
+
+    muH = eH*(rhoDOC + rhoPhoto)
+    muE = eE*pE
+
+    dH = (muH-mH)*H
+    dE = (muE-mE)*E
+    dN = rhoDIN - uH - uE*E/H + delN*(NI-N)
+    dC  = rH + rE*E/H - pE*E/H + delC*(CI-C)
+
+    return [dH,dE,dN,dC]
+
+
 
 
 def symbDeath(t,y,cD):
@@ -70,7 +105,7 @@ loadStop.terminal = True
 
 def _plotLimFac(t, y, cD):
     H, E,  N, C = y
-    rE, rH, pE, muH, muE, uH, uE, rhoPhoto, rhoDIN, mH, mE, rhoDOC, rhoDON  = makeFuncs(t,y,cD)
+    rE, rH, pE, muH, muE, uH, uE, rhoPhoto, rhoDIN, rhoDOC, rhoDON, eH, eE  = makeFuncs(t,y,cD)
 
     fig, (ax1,ax2,ax3) = plt.subplots(nrows=3, ncols=1)
 
@@ -108,17 +143,18 @@ if __name__ == "__main__":
     import scipy.integrate as integ
     import scipy.signal as signal
     
-    y0 = [17,0.0001,0.05,0.16]  #[1.56068376e+02, 2.58806457e+01, 1.15384615e-02, 6.07692308e-02]
+    y0 = [70,10,0.01,0.01] 
     tEnd = 500
-    cD = makeCons([("pmax",0.5),("KNE",0.004)])
+    cD = makeCons([("dN",0.6)])
     sol = integ.solve_ivp(endo, y0=y0, t_span=[0,tEnd], args=(cD,), dense_output=False, vectorized=True, method="Radau", max_step = np.inf, rtol=1e-8, atol = 1e-8, events=[])
     print(sol)
-    print(sol.y[:,-1])
 
     ### Plotting 
     H, E, N, C = sol.y
-    rE, rH, pE, muH, muE, uH, uE, rhoPhoto, rhoDIN, mH, mE, rhoDOC, rhoDON = makeFuncs(sol.t,sol.y,cD)
+    rE, rH, pE, muH, muE, uH, uE, rhoPhoto, rhoDIN, rhoDOC, rhoDON, eH, eE = makeFuncs(sol.t,sol.y,cD)
     t = sol.t
+
+    print(f"eH = {eH[1]}, eE = {eE[1]}")
 
     fig, (ax1,ax2) = plt.subplots(nrows=2, ncols=1)
     
