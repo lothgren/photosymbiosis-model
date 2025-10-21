@@ -4,14 +4,26 @@ import matplotlib.pyplot as plt
 import numpy as np
 import sympy as sp
 
+H, E, N, C = sp.symbols("H E N C", real=True)
+s, to, b, pmax, KCO2, delC, CI, mE, mH, rho0, HCap, delN, NI, KNE, uEmax, KNH, uHmax, QE, QH, QFood = sp.symbols(
+    r"s TO \beta p_{\max} K_{CO_2} d_C C_I m_E m_H rho_{Food\,\max} H_{\max} d_N N_I K_E u_{E\,\max} K_H u_{H\,\max} Q_E Q_H Q_{food}", real=True)
+
 
 def makeCons(changes=[]):
-    dict = {"s": 1, "to": 1, "b": 0.5, "pmax": 0.7, "KCO_2": 0.01, "dC": 0.5, "CI": 0.1, "mE": 0.10, "mH": 0.03, "rho0": 0.03*3, "HCap": 166,
-            "dN": 0.2, "NI": 0.005, "KNE": 0.05, "uEmax" : 0.05, "KNH": 0.01, "uHmax" : 0.04, "QE": 0.15, "QH": 0.15, "QFood": 0.15}
-
+    paraValues = {s: 1, to: 1, b: 0.5, pmax: 0.7, KCO2: 0.01, delC: 0.5, CI: 0.1, mE: 0.1, mH: 0.03, rho0: 0.03*3, HCap: 166, 
+                  delN: 0.2, NI:0.005, KNE: 0.05, uEmax : 0.05, KNH: 0.01, uHmax : 0.04, QE: 0.15, QH: 0.15, QFood: 0.15}
     for change in changes:
-        dict[change[0]] = change[1]
-    return dict
+        paraValues[change[0]] = change[1]
+    return paraValues
+
+
+#def makeCons(changes=[]):
+#    dict = {"s": 1, "to": 1, "b": 0.5, "pmax": 0.7, "KCO_2": 0.01, "dC": 0.5, "CI": 0.1, "mE": 0.10, "mH": 0.03, "rho0": 0.03*3, "HCap": 166,
+#            "dN": 0.2, "NI": 0.005, "KNE": 0.05, "uEmax" : 0.05, "KNH": 0.01, "uHmax" : 0.04, "QE": 0.15, "QH": 0.15, "QFood": 0.15}
+#
+#    for change in changes:
+#        dict[change[0]] = change[1]
+#    return dict
 
 
 def minApprox(a,b,e=1e-4):
@@ -20,24 +32,24 @@ def minApprox(a,b,e=1e-4):
 
 def makeFuncs(t, y, cD):  
     H, E, N, C = y
-    rhoDOC = cD["rho0"]*(1-H/cD["HCap"])  #np.maximum(0,cD["rho0"]*(1-H/cD["HCap"]))
-    rhoDON = rhoDOC*cD["QFood"]
+    rhoDOC = cD[rho0]*(1-H/cD[HCap])  #np.maximum(0,cD["rho0"]*(1-H/cD["HCap"]))
+    rhoDON = rhoDOC*cD[QFood]
 
-    uH = cD["uHmax"] *(N)/( cD["KNH"] + N )
-    uE = cD["uEmax"] *(N)/( cD["KNE"] + N )
+    uH = cD[uHmax] *(N)/( cD[KNH] + N )
+    uE = cD[uEmax] *(N)/( cD[KNE] + N )
 
-    pE = cD["pmax"] * C/(cD["KCO_2"] + C)
-    nE = (uE/pE)/cD["QE"]
-    eE  = minApprox(1/(cD["s"]+1), nE)    #np.minimum(1/(cD["s"]+1), nE)
+    pE = cD[pmax] * C/(cD[KCO2] + C)
+    nE = (uE/pE)/cD[QE]
+    eE  = np.minimum(1/(cD[s]+1), nE)         #minApprox(1/(cD[s]+1), nE)
 
-    rhoPhoto = (1-(1+cD["s"])*eE)*pE*E/H
-    nH = ( (rhoDON + uH)/(rhoDOC+rhoPhoto) )/cD["QH"]
-    eH  = minApprox(1/(cD["s"]+1), nH)     #np.minimum(1/(cD["s"]+1), nH)
+    rhoPhoto = (1-(1+cD[s])*eE)*pE*E/H
+    nH = ( (rhoDON + uH)/(rhoDOC+rhoPhoto) )/cD[QH]
+    eH  = np.minimum(1/(cD[s]+1), nH)         #minApprox(1/(cD[s]+1), nH)
 
-    rH = cD["b"]* ( cD["s"]*eH*(rhoDOC + rhoPhoto) + cD["mH"]*cD["to"])
-    rE = cD["b"]* ( cD["s"]*eE*pE + cD["mE"]*cD["to"] )
+    rH = cD[b]* ( cD[s]*eH*(rhoDOC + rhoPhoto) + cD[mH]*cD[to])
+    rE = cD[b]* ( cD[s]*eE*pE + cD[mE]*cD[to] )
 
-    rhoDIN = (1-eH/nH)*(rhoDON + uH) + cD["mH"]*cD["to"]*cD["QH"] + cD["mE"]*cD["to"]*cD["QE"]*E/H
+    rhoDIN = (1-eH/nH)*(rhoDON + uH) + cD[mH]*cD[to]*cD[QH] + cD[mE]*cD[to]*cD[QE]*E/H
 
     muH = eH*(rhoDOC + rhoPhoto)
     muE = eE*pE
@@ -49,43 +61,40 @@ def endo(t, y, cD):
     H, E, N, C = y
     rE, rH, pE, muH, muE, uH, uE, rhoPhoto, rhoDIN, rhoDOC, rhoDON, eH, eE  = makeFuncs(t,y,cD)
 
-    dH = (muH-cD["mH"]*cD["to"])*H
-    dE = (muE-cD["mE"]*cD["to"])*E
+    dH = (muH-cD[mH]*cD[to])*H
+    dE = (muE-cD[mE]*cD[to])*E
 
-    dN = rhoDIN - uH - uE*E/H + cD["dN"]*(cD["NI"]-N)
-    dC  = rH + rE*E/H - pE*E/H + cD["dC"]*(cD["CI"]-C)
+    dN = rhoDIN - uH - uE*E/H + cD[delN]*(cD[NI]-N)
+    dC  = rH + rE*E/H - pE*E/H + cD[delC]*(cD[CI]-C)
 
     return [dH,dE,dN,dC]
 
 
 def endoSymbolic(nLimH = False, nLimE = True):
-    H, E, N, C = sp.symbols("H E N C", real=True)
-    s, b, pmax, KCO2, delC, CI, mE, mH, rho0, HCap, delN, NI, KNE, uEmax, KNH, uHmax, Q = sp.symbols("s b pmax KCO2 dC CI mE mH rho0 HCap dN NI KNE uEmax KNH uHmax Q", real=True)
-
     rhoDOC = rho0*(1-H/HCap)
-    rhoDON = rhoDOC*Q
+    rhoDON = rhoDOC*QFood
 
     uH = uHmax *(N)/( KNH + N )
     uE = uEmax *(N)/( KNE + N )
 
     pE = pmax * C/(KCO2 + C)
-    nE = (uE/pE)/Q
+    nE = (uE/pE)/QE
     eE = nE if nLimE else 1/(1+s)
 
     rhoPhoto = (1-(1+s)*eE)*pE*E/H
-    nH = ( (rhoDON + uH)/(rhoDOC+rhoPhoto) )/Q
-    eH = nH if nLimH else 1/(1+s)  # sp.Min(1/(s+1), nH)
+    nH = ( (rhoDON + uH)/(rhoDOC+rhoPhoto) )/QH
+    eH = nH if nLimH else 1/(1+s)                # sp.Min(1/(s+1), nH)
 
-    rH = b* ( s*eH*(rhoDOC + rhoPhoto) + mH)
-    rE = b* ( s*eE*pE + mE )
+    rH = b* ( s*eH*(rhoDOC + rhoPhoto) + mH*to )
+    rE = b* ( s*eE*pE + mE*to )
 
-    rhoDIN = (1-eH/nH)*(rhoDON + uH) + mH*Q + mE*Q*E/H
+    rhoDIN = (1-eH/nH)*(rhoDON + uH) + mH*to*QH + mE*to*QE*E/H
 
     muH = eH*(rhoDOC + rhoPhoto)
     muE = eE*pE
 
-    dH = (muH-mH)*H
-    dE = (muE-mE)*E
+    dH = (muH-mH*to)*H
+    dE = (muE-mE*to)*E
     dN = rhoDIN - uH - uE*E/H + delN*(NI-N)
     dC  = rH + rE*E/H - pE*E/H + delC*(CI-C)
 
@@ -116,12 +125,12 @@ def _plotLimFac(t, y, cD):
     ax2.plot(t,uE,"g--", label=r"$u_E$")
     ax2.plot(t,uE*E/H,"g", label=r"$u_E\frac{E}{H}$")
     ax2.plot(t,rhoDIN-uH,"b", label=r"$\rho_{DIN}-u_H$")
-    ax2.plot(t,cD["dN"]*(cD["NI"]-N), "r--", label=r"$\delta_N (N_I-N)$")
+    ax2.plot(t,cD[delN]*(cD[NI]-N), "r--", label=r"$\delta_N (N_I-N)$")
  
     ax3.plot(t, rH,"b", label=r"$r_{H}$")
     ax3.plot(t, rE*E/H,"b--", label=r"$r_{E}\frac{E}{H}$")
     ax3.plot(t, pE*E/H,"g--", label=r"$p_{E}\frac{E}{H}$")
-    ax3.plot(t, cD["dC"]*(cD["CI"]-C),"k--", label=r"$\delta_C (C_I-C)$")
+    ax3.plot(t, cD[delC]*(cD[CI]-C),"k--", label=r"$\delta_C (C_I-C)$")
 
     ax1.legend(loc="upper right")
     twin1.legend(loc="lower right")
@@ -133,6 +142,10 @@ def _plotLimFac(t, y, cD):
     ax2.set_ylabel("mol N/mol C/d")
     ax3.set_ylabel("mol C/mol C/d")
     ax3.set_xlabel("days")
+
+    plt.figure()
+    plt.plot(t,eH,"C0")
+    plt.plot(t,eE,"C2")
     
 
 
@@ -143,9 +156,9 @@ if __name__ == "__main__":
     import scipy.integrate as integ
     import scipy.signal as signal
     
-    y0 = [70,10,0.01,0.01] 
-    tEnd = 500
-    cD = makeCons([("dN",0.6)])
+    y0 = [125.597883597883, 47.9261178749686, 0.0214285714285714, 0.00749276352332382] 
+    tEnd = 1500
+    cD = makeCons([(uHmax,0.0011020408163265306),]) 
     sol = integ.solve_ivp(endo, y0=y0, t_span=[0,tEnd], args=(cD,), dense_output=False, vectorized=True, method="Radau", max_step = np.inf, rtol=1e-8, atol = 1e-8, events=[])
     print(sol)
 
@@ -183,7 +196,6 @@ if __name__ == "__main__":
     twin1.legend()
     ax2.legend(loc="upper right")
     twin2.legend(loc="lower right")
-
 
     _plotLimFac(t, sol.y, cD)
     plt.show()

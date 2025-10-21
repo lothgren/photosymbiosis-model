@@ -3,8 +3,6 @@
 from analysisTools import *
 import sympy as sp
 
-##### Functions and constants
-
 
 ###### Plotting bifurcation diagrams
 
@@ -52,143 +50,66 @@ def multEvents(y0,tSpan,cons=[],eventList=[]):
 
 
 
-def stepWiseSim():
-    cons = []
-    y0 = [5, 0, 0.001, 0.001]                 # Plot establishing of host
-    t1, y1, funcs1, cD = simSystem(y0, [0,500],cons=cons)
-    
-    ny0 = y1[:,-1]
-    ny0[1] = 1e-2                             # Infection and establishing of endosymbiont
-    t2, y2, funcs2, cD = simSystem(ny0, [500,1000],cons=cons)
+###### bifurcation diagram
+def plotBifur(para,bList,ax=None, save=False):
+    if ax == None:
+        fig, ax = plt.subplots(1,1)
 
-    cons += [("s",1.5)]
-    ny0 = y2[:,-1]                            # Increased energy demand
-    t3, y3, funcs3, cD = simSystem(ny0, [1000,1500],cons=cons)
+    mList = ["d", "^", "o", "s"] + ["x"]*10
+    mfcList = ["none", None]
 
-    ny0 = y3[:,-1]
-    ny0[2] = 0.05                             # N pulse
-    t4, y4, funcs4, cD = simSystem(ny0, [1500,2000],cons=cons)
-    
+    for i in range(max(bList[:,-2])+1):
+        for j in range(2):
+            m, mfc = mList[i], mfcList[j]
+            rowInd = (bList[:,-1]==j) & (bList[:,-2]==i)
+            ax.plot(bList[rowInd,0],bList[rowInd,2], color = "C2", marker = m, mfc = mfc, ms= 5.0, alpha=0.6, ls="")
+            ax.plot(bList[rowInd,0],bList[rowInd,1], color = "C0", marker = m, mfc = mfc, ms= 5.0, alpha=0.6, ls="")
 
-    ### Plotting 
-    Y = np.c_[y1, y2, y3, y4]
-    H, E, N, C = Y
-    t = np.append(t1,np.append(t2,np.append(t3,t4)))
-    rE, rH, pE, muH, muE, uH, uE, rhoPhoto, rhoDIN, mH, mE, rhoDOC, rhoDON = np.c_[funcs1, funcs2, funcs3, funcs4]
-
-
-    fig, axs = plt.subplots(nrows=2, ncols=1)
-    
-    axs[0].axvline(500, color="k",dashes=(0.7,0.7),alpha=0.8)
-    axs[1].axvline(500, color="k",dashes=(0.7,0.7),alpha=0.8)
-    axs[0].text(500-2,5e-2,"E infection ->",ha="right")
-
-    axs[0].axvline(1000, color="k",dashes=(0.7,0.7),alpha=0.8)
-    axs[1].axvline(1000, color="k",dashes=(0.7,0.7),alpha=0.8)
-    axs[0].text(1000+2,1e-0,"<- Increase C demand",ha="left")
-
-    axs[0].axvline(1500, color="k",dashes=(0.7,0.7),alpha=0.8)
-    axs[1].axvline(1500, color="k",dashes=(0.7,0.7),alpha=0.8)
-    axs[0].text(1500+2,5e-2,"<- N pulse",ha="left")
-    
-    
-    axs[0].semilogy(t,E,"C2",label="E")
-    axs[0].semilogy(t,H,"C0",label="H")
-    twin0 = axs[0].twinx()
-    twin0.plot(t,E/H,"gold", label = "$E/H$")
-    #twin0.set_ylim(None,1.1)
-    
-    
-    twin1 = axs[1].twinx()
-    twin1.plot(t,muE,"g", label=r"$\mu_{E}$")
-    twin1.plot(t,pE,"g--", label=r"$p_{E}$")
-    axs[1].plot(t,muH,"b", label=r"$\mu_{H}$")
-    axs[1].plot(t,rhoPhoto,"r--", label=r"$\rho_{photo}$")
-    axs[1].plot(t,rhoDOC,"k--", label=r"$\rho_{Food}$")
-
-
-    axs[0].set_ylabel(r"mol C /m$^2$")
-    twin0.set_ylabel("E biomass/H iomass")
-    axs[1].set_ylabel(r"d$^{-1}$")
-    twin1.set_ylabel(r"d$^{-1}$")
-    axs[1].set_xlabel("d")
-
-    axs[0].legend()
-    twin0.legend()
-    axs[1].legend(loc="upper right")
-    twin1.legend(loc="lower right")
-
-    plt.savefig("figs/estab2Breakdown.png")
-
-
-    ######################################### second plot ######################################
-    fig2, axs2 = plt.subplots(nrows=3, ncols=1)
-
-    axs2[0].plot(t,N,"C0", label = "$N$")
-    twin20 = axs2[0].twinx()
-    twin20.plot(t,C,"k--",label="C")
-
-    axs2[1].plot(t,uE,"g--", label=r"$u_E$")
-    axs2[1].plot(t,uE*E/H,"g", label=r"$u_E\frac{E}{H}$")
-    axs2[1].plot(t,rhoDIN-uH,"b--", label=r"$\rho_{DIN}$")
-    axs2[1].plot(t, cD["dN"]*(cD["NI"]-N),"r--", label=r"$\delta_N (N_I-N)$")
- 
-    axs2[2].plot(t, rH,"b", label=r"$r_{H}$")
-    axs2[2].plot(t, rE*E/H,"b--", label=r"$r_{E}\frac{E}{H}$")
-    axs2[2].plot(t, pE*E/H,"g--", label=r"$p_{E}\frac{E}{H}$")
-    axs2[2].plot(t, cD["dC"]*(cD["CI"]-C),"k--", label=r"$\delta_C (C_I-C)$")
-
-    axs2[0].legend()
-    axs2[1].legend()
-    twin0.legend()
-    axs2[2].legend()
-
-    axs2[0].set_ylabel("mol N/mol C")
-    twin20.set_ylabel("mol CO$_2$/mol C")
-    axs2[1].set_ylabel("mol N/mol C/d")
-    axs2[2].set_ylabel("mol C/mol C/d")
-    axs2[2].set_xlabel("days")
-
-    plt.savefig("figs/estab2BreakdownCN.png")
-
-
-def bifurPlotting():
-    fig, axs = plt.subplots(3,3)
-    
-    cons = []
-    
-    
-    plotBifur("s", [0.5,2.5], cons, bFunc=bifur, save=True, ax=axs[0,0])
-    plotBifur("to", [0.5,2], cons, initVal=None,bFunc=bifur, save=True, ax=axs[1,0])
-    plotBifur("pmax", [2,0], cons, bFunc=bifur, save=True, ax=axs[2,0])
-
-    plotBifur("uEmax", [0.01,0.07], cons, bFunc=bifur, save=True, ax=axs[0,1])
-    plotBifur("KNE", [0.3,0.001], cons, bFunc=bifur, save=True, ax=axs[1,1])
-    plotBifur("dN", [0.35,0.001], cons, bFunc=bifur, save=True, ax=axs[2,1])
-
-    plotBifur("uHmax", [0.07,0], cons, bFunc=bifur, save=True, ax=axs[0,2])
-    plotBifur("KNH", [0.3,0.001], cons, bFunc=bifur, save=True, ax=axs[1,2])    
-    plotBifur("dC", [0.6,0], cons, bFunc=bifur, save=True, ax=axs[2,2])
-
-
-    
-    
+    #ax.legend()
+    ax.set_xlabel(f"${para.name}$")
+    ax.set_ylabel("$H^*$, $E^*$ (mol C/m$^2$)")
+    if save:
+        saveName = para.name.replace("\\","")
+        plt.savefig("figs/bifurs/num_bifur_" + saveName + ".png")
 
 
 
+def runCollection(pList,save=False,preView=True,cons=[]):
+    bifurList = { s: [0.9,1.5], to: [0.5,2], pmax: [0.01,1.5], uEmax: [0.015,0.09], uHmax: [0.0,0.006], KNE: [0.0,0.15], KNH: [0.0,0.7], 
+                 delC: [0.0,0.7], CI: [0.0,0.15], delN: [0.0,0.7], NI: [0.0,0.02], mH: [0.01,0.06], KCO2: [0.0,0.05], rho0: [0,0.1]}
+    fig, axs = plt.subplots(len(pList), len(pList[0]))
+
+    for i in range(len(pList)):
+        for j in range(len(pList[i])):
+            para, span = pList[i][j], bifurList[pList[i][j]]
+            bList = makeSymbBifur(para,span,cons)
+            
+            if preView:
+                if np.ndim(np.squeeze(pList)) >= 2:
+                    ax = axs[i,j] 
+                elif np.ndim(np.squeeze(pList)) == 1: 
+                    ax = axs[i+j]
+                else:
+                    ax = axs
+                plotBifur(para,bList,ax=ax,save=False)
+            
+            if save:
+                plotBifur(para,bList,ax=None,save=True)
+                plt.close()
+
+    if preView:
+        plt.show()
 
 #### Running stuff
 
 #estabSim()
 
-multEvents([50, 0.01, 0.1, 0.02],[0,400],cons=[("s",1.0)],eventList=[
-   [[None, None, None, None],200,[("NI",0.075)]]
-])
-plt.vlines(400, 0, 0.1,"grey")
-plt.text(400-2,5e-2,"NI increase ->",ha="right")
+#multEvents([50, 0.01, 0.1, 0.02],[0,250],cons=[("s",1.0)],eventList=[
+#   [[None, None, 0.5, None],200,[]]
+#])
+#plt.vlines(250, 0, 0.1,"grey")
+#plt.text(250-2,4e-2,"N pulse ->",ha="right")
 
 
-#stepWiseSim()
-#bifurPlotting()
 
-plt.show()
+runCollection([[s, to, pmax], [CI,NI,rho0], [uEmax,uHmax,KNE]], preView=True,save=True)

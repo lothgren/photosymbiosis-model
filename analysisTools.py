@@ -1,8 +1,13 @@
 #Tools to analyse coral model (created 20/6)
 
 from model import *
-import numpy as np
+
 import matplotlib.pyplot as plt
+import seaborn as sns
+
+import numpy as np
+import pandas as pd
+
 import scipy.integrate as integ
 import scipy.signal as signal
 import scipy.stats as stats
@@ -96,32 +101,26 @@ def plotCN(t,y,funcs,cD):
 
 
 ##### Symbolic function ####################################################
-def checkFixedPoint(nLimH, nLimE, paraValueList=[]):
+def checkFixedPoint(nLimH, nLimE, cons=[]):
     """Function uses symbolic computation to find fixed points for a given stat (H and/or E under nutrient limitation)"""
-    H, E, N, C = sp.symbols("H E N C", real=True)
-    s, b, pmax, KCO2, delC, CI, mE, mH, rho0, HCap, delN, NI, KNE, uEmax, KNH, uHmax, Q = sp.symbols("s b pmax KCO2 dC CI mE mH rho0 HCap dN NI KNE uEmax KNH uHmax Q", real=True)
-    paraValues = {s: 1, b: 0.5, pmax: 0.7, KCO2: 0.01, delC: 0.5, CI: 0.1, mE: 0.1, mH: 0.03, rho0: 0.03*3, HCap: 166, delN: 0.2, NI:0.005, KNE: 0.05, uEmax : 0.05, KNH: 0.01, uHmax : 0.04, Q: 0.15}
-    for pValue in paraValueList:
-        paraValues[pValue[0]] = pValue[1]
+    paraValues = makeCons(cons)
 
     [dH,dE,dN,dC] = endoSymbolic(nLimH,nLimE)
     dfSubbed = [dH.subs(paraValues),dE.subs(paraValues),dN.subs(paraValues),dC.subs(paraValues)]
     fixedPoints = sp.solve(dfSubbed,[H, E, N, C])
-    print(fixedPoints)
+    #print(fixedPoints)
     return fixedPoints
 
 
-def checkSymbolicStab(yStar,state, paraValues, printEig = False):
+def checkSymbolicStab(yStar, cD, printEig = False):
     """Need some more work I guess"""
-    F = sp.Matrix(endoSymbolic(state[0],state[1])).subs(paraValues)
-    J = F.jacobian([H,E,N,C])
+    funcs = makeFuncs(np.nan,yStar,cD)
+    state= [funcs[-2]<1/(1+cD[s]),  funcs[-1]<1/(1+cD[s])]
 
-    dict, keys = {}, [H,E,N,C]
-    for i in range(len(yStar)):
-        dict[keys[i]] = yStar[i]
+    F = sp.Matrix(endoSymbolic(state[0],state[1])).subs(cD)
+    J = F.jacobian([H,E,N,C])
     
-    print(np.array(J.subs(dict), dtype=np.float64))
-    eig = J.subs(dict).eigenvals()
+    eig = J.subs([(H,yStar[0]), (E,yStar[1]), (N,yStar[2]), (C,yStar[3])]).eigenvals()
     stab, numDir = True, 0
 
     for val, mult in eig.items():
@@ -131,7 +130,32 @@ def checkSymbolicStab(yStar,state, paraValues, printEig = False):
             stab = False
             numDir += 1
 
-    return stab, numDir
+    return stab#, numDir
+
+
+def _tupleInList(t,lst,tol=1e-4):
+    if not lst:  #check if empty
+        return False
+    newLst = np.array(lst)
+    diffs = np.abs(newLst - np.array(t))
+    return np.any(np.all(diffs <= tol, axis=1))
+
+def makeSymbBifur(para,span,cons=[]): 
+    pValues = np.linspace(span[0],span[1],50)
+    fixList = []
+    for p in pValues:
+        cD = makeCons(cons+[(para,p)])
+        fixedPoints = sorted(checkFixedPoint(0,0,cons=[(para,p)])) + sorted(checkFixedPoint(0,1,cons=[(para,p)]))
+        curatedFps = []
+        for fp in fixedPoints:
+            if all(val>=0 for val in fp) and not _tupleInList(fp,curatedFps): 
+                curatedFps.append(fp)
+        for i in range(len(curatedFps)):
+            fp = curatedFps[i]
+            stab = checkSymbolicStab(fp, cD)
+            fixList.append( np.concatenate([ [p], fp, [i], [stab]]) )
+            print(f"{para}: {p}, H: {round(fp[0],20)}, E: {round(fp[1],20)}, N: {round(fp[2],20)}, C: {round(fp[3],20)}, fp: {i}, stable = {stab}")
+    return np.array(fixList)
 
 
 
@@ -149,7 +173,7 @@ def checkStab(yStar,cD):
     res = diff.jacobian(lambda y: endo(0,y,cD), yStar, order=10, initial_step=0.1, maxiter=100, tolerances={"rtol":1e-12, "atol":1e-12} )
     eig, _ = la.eig(res.df, check_finite=False)
     #print(res.df)
-    #print(f"eigenvalues: {eig}")
+    print(f"eigenvalues: {max([np.real(val) for val in eig])}")
     if all(val.real<0 for val in eig):
         return True
     else:
@@ -161,26 +185,25 @@ def numBifur(para,pValues,y0,cons=[]):
     for p in pValues:
         cD = makeCons(cons+[(para,p)])
         sol = opt.root(lambda y: endo(0,y,cD), y0, method="hybr", tol=1e-12, options={"xtol":1e-12,"maxfev":0,"eps":0.1})
-        if all(val>=-1e-10 for val in sol.x):
-            stab = checkStab(sol.x, cD)
-            fixList.append( np.concatenate([ [p],y0,[stab] ]) )
+        stab = checkStab(sol.x, cD)
+        fixList.append( np.concatenate([ [p],y0,[stab] ]) )
         print(f"{para}: {p}, H: {round(sol.x[0],3)}, E: {round(sol.x[1],10)}, N: {round(sol.x[2],10)}, C: {round(sol.x[3],10)}, stable = {stab}")
         y0 = sol.x
     return np.array(fixList)
 
 
 def makeNumBifur(para,span):
-    fixedPoints = checkFixedPoint(0,1) + checkFixedPoint(0,0)
+    fixedPoints = checkFixedPoint(0,1) + checkFixedPoint(0,0)+ checkFixedPoint(1,0) + checkFixedPoint(1,1)
     standardVal = makeCons()[para]
-    step = (span[1]-span[0])/300
-    mList, m = ["s", "o", "^", "H"], 0
+    step = (span[1]-span[0])/100
+    mList, m = ["s", "o", "^", ">", "H"] + ["o"]*20, 0
     for i in range(len(fixedPoints)):
         fp = np.array(fixedPoints[i],dtype="float64")
-        if all(val>0 for val in fp):
+        if True:#all(val>0 for val in fp):
             for j in range(2):
                 pList = np.arange(standardVal,span[j],(-1)**(j+1)*step)
                 fixList = numBifur(para,pList,fp)
-                for k in range(0,len(fixList[:,0]),4):
+                for k in range(0,len(fixList[:,0]),1):
                     if j == 1 and k == 0: continue
                     c = None if fixList[k,-1] else "red" 
                     plt.plot(fixList[k,0], fixList[k,1], color = "C0", mec = c, marker = mList[m], ms= 5.0, alpha=0.6, ls="", label = "$H^*$")
@@ -188,7 +211,26 @@ def makeNumBifur(para,span):
             m += 1
     plt.xlabel(para)
     plt.ylabel("$H^*$, $E^*$ (mol C/m$^2$)")
-    plt.savefig("figs2/num_bifur_" + para + ".png")
+    #plt.savefig("figs2/num_bifur_" + para + ".png")
+
+
+def makeNumBifur2(para,span,cons=[]):                          
+    fixedPoints = checkFixedPoint(0,1,cons) + checkFixedPoint(0,0,cons) #+ checkFixedPoint(1,0) + checkFixedPoint(1,1)
+    standardVal = makeCons(cons)[para]
+    step = (span[1]-span[0])/300
+
+    bTable = np.empty((0,6))
+    for i in range(len(fixedPoints)):
+        fp = np.array(fixedPoints[i],dtype="float64")
+        if all(val>0 for val in fp):  ##Excludes trivial fixedpoint...
+            for j in range(2):
+                pList = np.arange(standardVal,span[j],(-1)**(j+1)*step)
+                fixList = numBifur(para,pList,fp,cons)
+                if j==0:
+                    bTable = np.r_[bTable, fixList[::-1]] 
+                else: 
+                    bTable = np.r_[bTable, fixList[1:,:]] 
+    return bTable
 
 
 ##### Bifurcation diagrams by simulations #####################################
@@ -299,7 +341,7 @@ def saveBifur(para, Y):
     plt.close()
 
 
-def plotBifur(para,span,cons, initVal=None, bFunc = simpleBifur, ax = None, save = False):
+def plotBifurOld(para,span,cons, initVal=None, bFunc = simpleBifur, ax = None, save = False):
     Y = np.array(bFunc(para,span,initVal=initVal,cons=cons))
     p, H, E, rhoPhoto = Y
     
@@ -318,13 +360,40 @@ def plotBifur(para,span,cons, initVal=None, bFunc = simpleBifur, ax = None, save
     twin.legend(loc="center right")
 
 
+###### Additional tools ########################################################
+def checkCollision(fpList):  #omg a recursive function :0
+    """Checks if a lsit of fixed points (given as tuples) contain any doubles 
     
-def plotAllBifur():
-    bifurList = { "s": [0.9,1.5], "to": [0.5,2], "pmax": [0.01,1.5], "uEmax": [0.015,0.09], "uHmax": [0.015,0.09], 
-                 "dC": [0.0,0.7], "CI": [0.0,0.15], "dN": [0.0,0.7], "NI": [0.0,0.02]}
+    """
+    if fpList == []:
+        return False
+    if _tupleInList(fpList[0], fpList[1:],tol=1e-1):
+        return True
+    return checkCollision(fpList[1:])
+
+l = [ (1,2.0001), (0,0), (1,2), (1,1)]
+print(checkCollision(l))
 
 
-if __name__ == "__main__":
-    makeNumBifur("KNE", [0.0001,0.15])
-    plt.show()
+
+if False:# __name__ == "__main__":
+    cD = makeCons([("CI",0.07)])
+    for i in np.arange(-0.5,0.5,0.01):
+        for j in np.arange(-0.5,0.5,0.01):
+            sol = opt.root(lambda y: endo(0,y,cD), [125.556, 18.6306115977, i, j], method="hybr", tol=1e-12, options={"xtol":1e-12,"maxfev":0,"eps":0.1})
+            if i==-0.5:
+                starList = [sol.x]
+            if all(np.linalg.norm(sol.x-fp)>1e-4 for fp in starList):
+                starList = np.r_[starList, [sol.x]]
+                
+            
+    for fp in starList:
+        if fp[1]>5:
+            print(fp)
+
+
+    
+    #makeNumBifur(CI, [0,0.15])
+    #plt.show()
+
     
