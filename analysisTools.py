@@ -8,6 +8,8 @@ import seaborn as sns
 import numpy as np
 import pandas as pd
 
+import jax
+
 import scipy.integrate as integ
 import scipy.signal as signal
 import scipy.stats as stats
@@ -81,12 +83,12 @@ def plotCN(t,y,funcs,cD):
     ax2.plot(t,uE*E/H,"C2", label=r"$u_E\frac{E}{H}$")
     ax2.plot(t,rhoDIN,"C0", ls ="dashed", label=r"$\rho_{DIN}$")
     ax2.plot(t,uH,"C0", label=r"$u_H$")
-    ax2.plot(t,cD["dC"]*(cD["CI"]-C),"C4", ls ="dashed", label=r"$\delta_N (N_I-N)$")
+    ax2.plot(t,cD[delC]*(cD[NI]-N),"C4", ls ="dashed", label=r"$\delta_N (N_I-N)$")
  
     ax3.plot(t, rH,"C0", label=r"$r_{H}$")
     ax3.plot(t, rE*E/H,"C0", ls ="dashed", label=r"$r_{E}\frac{E}{H}$")
     ax3.plot(t, pE*E/H,"C2", ls ="dashed", label=r"$p_{E}\frac{E}{H}$")
-    ax3.plot(t, cD["dC"]*(cD["CI"]-C),"k", ls ="dashed", label=r"$\delta_C (C_I-C)$")
+    ax3.plot(t, cD[delC]*(cD[CI]-C),"k", ls ="dashed", label=r"$\delta_C (C_I-C)$")
 
     ax1.legend(loc="center left")
     ax2.legend()
@@ -100,20 +102,85 @@ def plotCN(t,y,funcs,cD):
     ax3.set_xlabel("days")
 
 
+def plot_sim_2(t,y,funcs,cD):
+    """Ploting a given simulation in matplotlib"""
+    H, E, N, C = y
+    rE, rH, pE, muH, muE, uH, uE, rhoPhoto, rhoDIN, rhoDOC, rhoDON, eH, eE = funcs
+
+    fig1, axs = plt.subplots(2,1)
+    ax1, ax2 = axs[0],axs[1]
+    ax1.semilogy(t,H,"C0",label="H")
+    ax1.semilogy(t,E,"C2",label="E")
+    twin1 = ax1.twinx()
+    twin1.plot(t,E/H,"C1", label = "$E/H$")
+    
+    ax1.legend(loc="center left")
+    twin1.legend(loc="center right")
+    ax1.set_ylabel(r"mol C /m$^2$")
+    twin1.set_ylabel("E biomass/H iomass")
+    ax1.set_xlabel("$d$")
+
+
+    ax2.plot(t,N,"C4", label = "$N$")
+    twin2 = ax2.twinx()
+    twin2.plot(t,C,"k",label="C")
+    
+    ax2.legend(loc="center left")
+    twin2.legend(loc="center right")
+    ax2.set_ylabel("mol N/mol C")
+    twin2.set_ylabel("mol CO$_2$/mol C")
+    ax2.set_xlabel("$d$")
+
+
+    fig3, ax3 = plt.subplots(1,1)
+    twin3 = ax3.twinx()
+    twin3.plot(t,muE,"C2", label=r"$\mu_{E}$")
+    twin3.plot(t,pE,"C2", ls ="dashed", label=r"$p_{E}$")
+    ax3.plot(t,muH,"C0", label=r"$\mu_{H}$")
+    ax3.plot(t,rhoPhoto,"C3", ls ="dashed", label=r"$\rho_{photo}$")
+    ax3.plot(t,rhoDOC,"k", ls="dashed", label=r"$\rho_{Food}$")
+
+    ax3.legend(loc="upper right")
+    twin3.legend(loc="lower right")
+    ax3.set_ylabel("$d^{-1}$")
+    ax3.set_xlabel("d")
+
+
+    fig4, ax4 = plt.subplots(1,1)
+    ax4.plot(t,uE*E/H,"C2", label=r"$u_E\frac{E}{H}$")
+    ax4.plot(t,uH - rhoDIN + (cD[mH]*cD[QH]+cD[mE]*cD[QE]*E/H),"C0", label="H net N-uptake")
+    ax4.plot(t,0*E+(cD[mH]*cD[QH]+cD[mE]*cD[QE]*E/H), "C0", ls ="dashed", label=r"$m_HQ_H+m_EQ_E\frac{E}{H}$")
+    ax4.plot(t,-cD[delN]*(cD[NI]-N),"C4", ls ="dashed", label=r"$\delta_N (N-N_I)$")
+
+    ax4.legend()
+    ax4.set_xlabel("d")
+    ax4.set_ylabel("mol N/mol C/d")
+
+    return ax1,ax2,ax3,ax4
+
+
 ##### Symbolic function ####################################################
-def checkFixedPoint(nLimH, nLimE, cons=[]):
+def checkFixedPoint(nLimH, nLimE, cD):
     """Function uses symbolic computation to find fixed points for a given stat (H and/or E under nutrient limitation)"""
-    paraValues = makeCons(cons)
 
     [dH,dE,dN,dC] = endoSymbolic(nLimH,nLimE)
-    dfSubbed = [dH.subs(paraValues),dE.subs(paraValues),dN.subs(paraValues),dC.subs(paraValues)]
+    dfSubbed = [dH.subs(cD),dE.subs(cD),dN.subs(cD),dC.subs(cD)]
     fixedPoints = sp.solve(dfSubbed,[H, E, N, C])
     #print(fixedPoints)
     return fixedPoints
 
 
-def checkSymbolicStab(yStar, cD, printEig = False):
-    """Need some more work I guess"""
+
+def checkSymbolicStab(yStar, cD):
+    """Check stability of fixed point by symbolically calculation jacobian and eigenvalues
+    
+    Arguments:
+    yStar: array-like, giving the fixed point of the system
+    cD: dict or dataframe, giving the parameter values of the system
+
+    Returns
+    True if all eigenvalues have negative real part, False otherwise
+    """
     funcs = makeFuncs(np.nan,yStar,cD)
     state= [funcs[-2]<1/(1+cD[s]),  funcs[-1]<1/(1+cD[s])]
 
@@ -124,8 +191,6 @@ def checkSymbolicStab(yStar, cD, printEig = False):
     stab, numDir = True, 0
 
     for val, mult in eig.items():
-        if printEig:
-            print("Eigenvalue:", sp.N(val))
         if sp.re(sp.N(val)) > 0:
             stab = False
             numDir += 1
@@ -133,30 +198,139 @@ def checkSymbolicStab(yStar, cD, printEig = False):
     return stab#, numDir
 
 
-def _tupleInList(t,lst,tol=1e-4):
-    if not lst:  #check if empty
-        return False
-    newLst = np.array(lst)
-    diffs = np.abs(newLst - np.array(t))
-    return np.any(np.all(diffs <= tol, axis=1))
+def checkIllegal(state,yStar,cD):
+    rE, rH, pE, muH, muE, uH, uE, rhoPhoto, rhoDIN, rhoDOC, rhoDON, eH, eE = makeFuncs(0,yStar,cD)
+    currState = [bool(eH<(1/(cD[s]+1))) , bool(eE<(1/(cD[s]+1)))]
+    return currState == state
 
-def makeSymbBifur(para,span,cons=[]): 
-    pValues = np.linspace(span[0],span[1],50)
+
+def _key(n):
+    return sum(n)
+
+
+def assign_fp_number(fp,state,i): # There has to be a prettier way to do this
+    if fp[1]<1e-2:
+            return 0
+    if state == [0,0]:
+        return i + 1
+    else:
+        return i + 2 
+
+
+def _curate_fps(fixed_points,state,cD):
+    """Takes a list of fixed points symbolicly calculated for a specific state and returns all feasible fixed points sorted from largest to smallest.
+    
+    Args:
+        fixed_points (array-like):  List of fps.
+        state (list): 2D array giving the state of the calculated fixed points.
+        cD (dict or dateframe): Parameter values used when calculating fixed points.
+
+    Returns:
+        list: Curated and sorted list of fixed points.
+    """
+    curated_fps = []
+    for fp in fixed_points:
+        if all(val>=0 for val in fp) and checkIllegal(state,fp,cD): 
+            curated_fps.append(fp)
+    return sorted(curated_fps,key=_key,reverse=True)
+
+
+def find_all_fps(cons=[], ignore_H_1 = True):
+    """Symbilicly finds all feasible fixed point of the function
+    
+    Args:"""
+    state_list = [(0,0), (0,1)] if ignore_H_1 else [(0,0), (0,1), (1,1), (1,0)]
+    cD = makeCons(cons)
+
+    fps = []
+    for i, j in state_list:
+        fps = fps + _curate_fps(checkFixedPoint(i,j,cD), [i,j], cD)
+
+    for i in range(len(fps)):
+        fp = fps[i]
+        if fp[1] == 0.0:
+            fps.remove(fp)
+            fps.insert(0,fp)
+
+    return fps
+
+
+def makeSymbBifur(para,span,state=[0,1],cons=[]): 
+    pValues = np.linspace(span[0],span[1],45)
     fixList = []
     for p in pValues:
         cD = makeCons(cons+[(para,p)])
-        fixedPoints = sorted(checkFixedPoint(0,0,cons=[(para,p)])) + sorted(checkFixedPoint(0,1,cons=[(para,p)]))
-        curatedFps = []
-        for fp in fixedPoints:
-            if all(val>=0 for val in fp) and not _tupleInList(fp,curatedFps): 
-                curatedFps.append(fp)
-        for i in range(len(curatedFps)):
-            fp = curatedFps[i]
+        fixedPoints = sorted(checkFixedPoint(state[0],state[1],cD),key=_key,reverse=True)
+        curated_fps = _curate_fps(fixedPoints,state,cD)
+        for i in range(len(curated_fps)):
+            fp = curated_fps[i]
+            num = assign_fp_number(fp,state,i)
             stab = checkSymbolicStab(fp, cD)
-            fixList.append( np.concatenate([ [p], fp, [i], [stab]]) )
-            print(f"{para}: {p}, H: {round(fp[0],20)}, E: {round(fp[1],20)}, N: {round(fp[2],20)}, C: {round(fp[3],20)}, fp: {i}, stable = {stab}")
+            fixList.append( np.concatenate([ [p], fp, [num], [stab]]) )
+            print(f"{para}: {p}, H: {round(fp[0],20)}, E: {round(fp[1],20)}, N: {round(fp[2],20)}, C: {round(fp[3],20)}, fp: {num}, stable = {stab}")
     return np.array(fixList)
 
+
+##### Bifurcation diagrams by using automatic differentiation #############
+def make_jac(f):
+    return jax.jacfwd(f)
+
+
+def check_stab(yStar,cD):
+    """Checking stability of fixed point using automatic differentiation
+    
+    Input
+    yStar: array-like fixed point
+    cD: dict or dataframe of parametervalues
+    
+    Output
+    Bool: True if stable, False otherwise"""
+    
+    J = make_jac(lambda y: endo(0,y,cD,minFunc=jax.numpy.minimum))
+    J_subbed = jax.numpy.array(J(jax.numpy.array(yStar)))
+    eig, _ = jax.numpy.linalg.eig(J_subbed)
+    if all(val.real<0 for val in eig):
+        return True
+    else:
+        return False
+
+
+def aut_bifur(para,p_values,y0,fp_num=None,cons=[]):
+    fixList = []
+    for p in p_values:
+        cD = makeCons(cons+[(para,p)])
+        f = lambda y: endo(0,y,cD,minFunc=minApprox)
+        J = make_jac(f)
+        sol = opt.root(f, y0, method="hybr", tol=1e-10, options={"xtol":1e-10,"maxfev":0,"eps":0.1})
+        if sol.success and all(val>=0 for val in sol.x):
+            fixList.append(np.concatenate( [[p], sol.x, [fp_num] ,[check_stab(sol.x,cD)]]))
+        else:
+            fixList.append( [p] + [np.nan]*len(sol.x) + [fp_num] + [False])
+        y0 = sol.x
+    return fixList
+
+
+def make_aut_bifur(para,span,cons=[]):
+    cD = makeCons(cons)
+    standardVal = cD[para]
+    step = (span[1]-span[0])/200
+
+    curatedFps = []
+    for state in [[0,0], [0,1] ]:     #, [1,1], [1,0]]:
+        fixedPoints = sorted(checkFixedPoint(state[0],state[1],cD),key=_key,reverse=True)
+        for fp in fixedPoints:
+            if all(val>=0 for val in fp) and checkIllegal(state,fp,cD): 
+                curatedFps.append(np.array(fp,dtype="float64"))
+    curatedFps = sorted(curatedFps,key=_key)
+
+    fix_list = []
+    for i in range(len(curatedFps)):
+        fp = curatedFps[i]
+        for j in range(2):
+            pList = np.arange(standardVal,span[j],(-1)**(j+1)*step)
+            fix_list = fix_list + aut_bifur(para,pList,fp,fp_num=i,cons=cons)
+    
+    return np.array(fix_list)
 
 
 ##### Bifurcation diagrams by numerically solving for the fixed point #####
@@ -184,25 +358,27 @@ def numBifur(para,pValues,y0,cons=[]):
     fixList = []
     for p in pValues:
         cD = makeCons(cons+[(para,p)])
-        sol = opt.root(lambda y: endo(0,y,cD), y0, method="hybr", tol=1e-12, options={"xtol":1e-12,"maxfev":0,"eps":0.1})
-        stab = checkStab(sol.x, cD)
-        fixList.append( np.concatenate([ [p],y0,[stab] ]) )
-        print(f"{para}: {p}, H: {round(sol.x[0],3)}, E: {round(sol.x[1],10)}, N: {round(sol.x[2],10)}, C: {round(sol.x[3],10)}, stable = {stab}")
+        sol = opt.root(lambda y: endo(0,y,cD,minFunc=minApprox), y0, method="hybr", tol=1e-12, options={"xtol":1e-12,"maxfev":0,"eps":0.1})
+        if sol.success and all(val>=0 for val in sol.x):
+            stab = checkStab(sol.x, cD)
+            fixList.append( np.concatenate([ [p],y0,[stab] ]) )
+            print(f"{para}: {p}, H: {round(sol.x[0],3)}, E: {round(sol.x[1],10)}, N: {round(sol.x[2],10)}, C: {round(sol.x[3],10)}, stable = {stab}")
         y0 = sol.x
     return np.array(fixList)
 
 
-def makeNumBifur(para,span):
-    fixedPoints = checkFixedPoint(0,1) + checkFixedPoint(0,0)+ checkFixedPoint(1,0) + checkFixedPoint(1,1)
-    standardVal = makeCons()[para]
+def makeNumBifur(para,span,cons=[]):
+    cD = makeCons(cons)
+    fixedPoints = checkFixedPoint(0,1,cD) + checkFixedPoint(0,0,cD) # checkFixedPoint(1,0,cD) + checkFixedPoint(1,1,cD)
+    standardVal = cD[para]
     step = (span[1]-span[0])/100
     mList, m = ["s", "o", "^", ">", "H"] + ["o"]*20, 0
     for i in range(len(fixedPoints)):
         fp = np.array(fixedPoints[i],dtype="float64")
-        if True:#all(val>0 for val in fp):
+        if all(val>=0 for val in fp):
             for j in range(2):
                 pList = np.arange(standardVal,span[j],(-1)**(j+1)*step)
-                fixList = numBifur(para,pList,fp)
+                fixList = numBifur(para,pList,fp,cons=cons)
                 for k in range(0,len(fixList[:,0]),1):
                     if j == 1 and k == 0: continue
                     c = None if fixList[k,-1] else "red" 
@@ -214,23 +390,22 @@ def makeNumBifur(para,span):
     #plt.savefig("figs2/num_bifur_" + para + ".png")
 
 
-def makeNumBifur2(para,span,cons=[]):                          
-    fixedPoints = checkFixedPoint(0,1,cons) + checkFixedPoint(0,0,cons) #+ checkFixedPoint(1,0) + checkFixedPoint(1,1)
+def makeNumBifur2(para,span,fixedPoints,cons=[]):  ## Obs doesn't check if fixed points are viable!                        
     standardVal = makeCons(cons)[para]
     step = (span[1]-span[0])/300
 
     bTable = np.empty((0,6))
     for i in range(len(fixedPoints)):
         fp = np.array(fixedPoints[i],dtype="float64")
-        if all(val>0 for val in fp):  ##Excludes trivial fixedpoint...
-            for j in range(2):
-                pList = np.arange(standardVal,span[j],(-1)**(j+1)*step)
-                fixList = numBifur(para,pList,fp,cons)
-                if j==0:
-                    bTable = np.r_[bTable, fixList[::-1]] 
-                else: 
-                    bTable = np.r_[bTable, fixList[1:,:]] 
+        for j in range(2):
+            pList = np.arange(standardVal,span[j],(-1)**(j+1)*step)
+            fixList = numBifur(para,pList,fp,cons)
+            if j==0:
+                bTable = np.r_[bTable, fixList[::-1]] 
+            else: 
+                bTable = np.r_[bTable, fixList[1:,:]] 
     return bTable
+
 
 
 ##### Bifurcation diagrams by simulations #####################################
@@ -361,39 +536,104 @@ def plotBifurOld(para,span,cons, initVal=None, bFunc = simpleBifur, ax = None, s
 
 
 ###### Additional tools ########################################################
-def checkCollision(fpList):  #omg a recursive function :0
-    """Checks if a lsit of fixed points (given as tuples) contain any doubles 
-    
-    """
-    if fpList == []:
-        return False
-    if _tupleInList(fpList[0], fpList[1:],tol=1e-1):
-        return True
-    return checkCollision(fpList[1:])
 
-l = [ (1,2.0001), (0,0), (1,2), (1,1)]
-print(checkCollision(l))
+def plot_aut_bifur():
+    fix_list = make_aut_bifur(para=uEmax,span=[0.0,0.04],cons=[(pmax,0.5), (uEmax,0.035), (mE,0.03), (NI,1e-4)])
 
+    unstable = fix_list[:,-1] == False
+    stable = fix_list[:,-1] == True
+    for i in range(2):
+        m, ms, alpha = "o", 3.0, 0.7
+        plt.plot(fix_list[unstable,0], fix_list[unstable,2], color = "C2", marker = m, mfc = "none", ms= ms, alpha=alpha, ls="")
+        plt.plot(fix_list[stable,0],   fix_list[stable,2],   color = "C2", marker = m,               ms= ms, alpha=alpha, ls="")
 
+        plt.plot(fix_list[unstable,0], fix_list[unstable,1], color = "C0", marker = m, mfc = "none", ms= ms, alpha=alpha, ls="")
+        plt.plot(fix_list[stable,0],   fix_list[stable,1],   color = "C0", marker = m,               ms= ms, alpha=alpha, ls="")
+    plt.show()
 
-if False:# __name__ == "__main__":
-    cD = makeCons([("CI",0.07)])
-    for i in np.arange(-0.5,0.5,0.01):
-        for j in np.arange(-0.5,0.5,0.01):
-            sol = opt.root(lambda y: endo(0,y,cD), [125.556, 18.6306115977, i, j], method="hybr", tol=1e-12, options={"xtol":1e-12,"maxfev":0,"eps":0.1})
-            if i==-0.5:
-                starList = [sol.x]
-            if all(np.linalg.norm(sol.x-fp)>1e-4 for fp in starList):
-                starList = np.r_[starList, [sol.x]]
-                
+def make_heat_graph(para1, para2, span1, span2, grid_size = 10):
+    para1_list = np.linspace(span1[0],span1[1], grid_size)
+    para2_list = np.linspace(span2[0],span2[1], grid_size)
+    heat_matrix = np.empty(shape=(len(para1_list),len(para2_list)))
+    for i in range(len(para1_list)):
+        p1 = para1_list[i]
+        for j in range(len(para2_list)):
+            p2 = para2_list[j]
+            cD = makeCons([(para1,p1),(para2,p2)])
+            fp_list = _curate_fps(checkFixedPoint(0, 1, cD), [0,1] ,cD)
+            print(f" {para1.name} = {p1}, {para2.name} = {p2},  fps = {fp_list}")
+            if len(fp_list) == 3:                           # <--- Normal case with three fixed points present
+                symb_load = fp_list[1][1]/fp_list[1][0]
+            elif len(fp_list) == 2 and fp_list[1][1] > 0:   # <--- Special case where no trivial fixed point exists
+                symb_load = fp_list[1][1]/fp_list[1][0]
+            elif len(fp_list) == 1:                         # <--- When only trivial fixed point exists we check if it is stable or unstable
+                if checkSymbolicStab(fp_list[0],cD):        #      if unstable, the parasitic state should exists a be an attractor. We choose to interpret this as no stable fixed point exists
+                    symb_load = 0
+                else:
+                    symb_load = None
+            else:
+                symb_load = None   #raise ValueError("Okej, okej now you need to investigate the bifur diagram or somepin!")
             
-    for fp in starList:
-        if fp[1]>5:
-            print(fp)
-
-
+            heat_matrix[i,j] = symb_load
     
-    #makeNumBifur(CI, [0,0.15])
-    #plt.show()
+    df = pd.DataFrame(heat_matrix[::-1], index = np.round(para1_list[::-1], 2), columns = np.round(para2_list, 2) )
+    print(df)
+    ax = sns.heatmap(df, linewidth=0.5, vmin=0, vmax=0.25, cbar_kws={"label": "$E/H$"})
 
+    ax.set_xticks(np.linspace(0.5, heat_matrix.shape[1] - 0.5, 5))           # Attempt at faking a continous axis
+    ax.set_xticklabels(np.round( np.linspace(span2[0], span2[1], 5), 3))     #
+    ax.set_yticks(np.linspace(0.5, heat_matrix.shape[0] - 0.5, 5))           # 
+    ax.set_yticklabels( np.round( np.linspace(span1[1], span1[0], 5), 3 ))   # 
+    
+    ax.set_ylabel(f"${para1.name}$")
+    ax.set_xlabel(f"${para2.name}$")
+
+    #plt.show()
+    name1, name2 = para1.name.replace("\\","").replace("{","").replace("}",""), para2.name.replace("\\","").replace("{","").replace("}","")
+    plt.savefig(f"figs/heat_graph_{name1}_{name2}.png")
+
+
+def make_init(ranges = None):
+    ranges = ranges or [[0,166], [0,1], [0,0.06], [1e-5,0.22]]
+    rand_vec = np.random.rand(4)
+    
+    y0 = []
+    for i in range(len(ranges)):
+        val = ranges[i][0] + (ranges[i][1]-ranges[i][0])*rand_vec[i]
+        if i == 1:
+            val = val*y0[0]
+        y0.append(val)
+    
+    return y0
+
+
+def plot_area_of_attraction(num_lines = 10, cons = []):
+    fps = find_all_fps(cons)
+    healthy = fps[-1]
+    print(fps)
+    mc = "k"
+    for i in range(num_lines):
+        y0 = make_init([[healthy[0]]*2, [healthy[1]/healthy[0]]*2, [0.0001,0.07], [0.0001,0.22]])
+        t, y, funcs, cD = simSystem(y0,[0,1500],cons=cons)
+        print(f"{y0}  --->   {y[:,-1]}")
+        for fp_num, fp in enumerate(fps):
+            diff = np.linalg.norm( y[:,-1] - np.array(fp, dtype="float64"))
+            if diff < 1e-1:
+                mc = "g" if fp_num == 3 else "r"
+                print(fp_num)
+                break
+        plt.plot(y0[2], y0[3], marker = "o", color=mc)
+
+    for fp in fps:
+        plt.plot(fp[2], fp[3], marker = "x", color="k")
+    
+    plt.ylabel("C")
+    plt.xlabel("N")
+    plt.show()
+
+
+if __name__ == "__main__":
+    #make_heat_graph(to,pmax,[0.5,2],[0.25,1], 10)
+
+    plot_area_of_attraction(num_lines=200, cons=[(s,1.3)])
     
