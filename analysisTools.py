@@ -18,7 +18,33 @@ import scipy.linalg as la
 import scipy.optimize as opt
 import sympy as sp
 
+from tqdm import tqdm
+
 ##### Simulation and basic plotting ############################
+p = sns.color_palette("colorblind")
+info = pd.DataFrame( 
+    data = [["$H$",        "H C-mol/m$^2$",       "Organism biomass", p[0], (1,0)],
+            ["$E$",        "E C-mol/m$^2$",       "Organism biomass", p[2], (1,0)],
+            ["$N$",        "DIN N-mol/H C-mol",   "Inorganic pool",   p[4], (1,0)],
+            ["$C$",        "DIC C-mol/H C-mol",   "Inorganic pool",   p[3], (1,0)],
+            ["$E/H$",      "E C-mol/H C-mol",     "Symbiont load",   p[0], (1,0)],
+
+            [r"$\mu_H$",              r"$d^{-1}$",  "Growth rate",             p[0], (1,0)],
+            [r"$\mu_E$",              r"$d^{-1}$", "Growth rate",             p[2], (1,0)],
+            [r"$\rho_{food}$",        r"$d^{-1}$", "Organic carbon flux",     p[7], (1,0)],
+            [r"$\rho_{photo}$",       r"$d^{-1}$", "Organic carbon flux",     p[1], (1,0)],
+            ["$p_E$",                 r"$d^{-1}$", "Inorganic carbon flux",   p[2], (2,2)],
+            ["$r_H$",                 r"$d^{-1}$", "Inorganic carbon flux",   p[0], (2,2)],
+            ["$r_E$",                 r"$d^{-1}$", "Inorganic carbon flux",   p[2], (2,2)],
+            ["net $N$ uptake by $H$", r"$d^{-1}$", "Inorganic nutrient flux", p[0], (1,0)],
+            ["net $N$ uptake by $H$", r"$d^{-1}$", "Inorganic nutrient flux", p[0], (1,0)],
+            ["$e_H$",                 "-",         "Net growth efficiency",   p[0], (1,0)],
+            ["$e_E$",                 "-",         "Net growth efficiency",   p[2], (1,0)]],
+    columns = ["tex_name", "unit", "type", "color", "dashes"],
+    index = ["H", "E", "N", "C", "E/H", "muH", "muE", "rhoDOC", "rhoPhoto", "$pE", "rH", "rE", "netNH", "netNE", "eH", "eE"]
+)
+
+
 def simSystem(y0,tSpan,cons=[],tEval=None):
     cD  = makeCons(cons)
     sol = integ.solve_ivp(endo, y0=y0, t_span=tSpan, t_eval=tEval, args=(cD,), dense_output=False, method="Radau", vectorized=True,
@@ -26,137 +52,99 @@ def simSystem(y0,tSpan,cons=[],tEval=None):
     if sol.status == 1:
         return sol.t_events[0][0], sol.y_events[0][0], makeFuncs(sol.t_events[0][0],sol.y_events[0][0],cD), cD
     if sol.status == -1:
-        return None,"Nope",None,None
+        return None,None,None,None
     funcs = makeFuncs(sol.t,sol.y,cD)
     return sol.t, sol.y, np.array(funcs), cD
 
 
-def makeDf(sol,funcs):
-    return
-
-
-def plotSim(t,y,funcs):
-    """Ploting a given simulation in matplotlib"""
-    H, E, N, C = y
-    rE, rH, pE, muH, muE, uH, uE, rhoPhoto, rhoDIN, rhoDOC, rhoDON, eH, eE = funcs
-
-    fig, (ax1,ax2) = plt.subplots(nrows=2, ncols=1)
+def make_df(t, y, funcs, save = ""):
+    """Makes a pandas dataframe of a given simulation solution. Save the simulation as csv file if specified
     
-    ax1.semilogy(t,H,"C0",label="H")
-    ax1.semilogy(t,E,"C2",label="E")
-    twin1 = ax1.twinx()
-    twin1.plot(t,E/H,"C1", label = "$E/H$")
+    Args:
+        t (array-like): Time vector of solution. Will set index for dataframe
+        y (array-like): Solution to numerical integration
+        funcs (array-like): The collection of function used to solve the ODE (what is returned by make_funcs())
+
+    Returns:
+        pandas.DataFrame: Solution given as dataframe
+    """
+    muH, muE, rhoDOC, rhoPhoto, pE, rH, rE, netNH, netNE, eH, eE = funcs
+    columns = ["H", "E", "N", "C", "E/H", r"$\mu_H$", r"$\mu_E$", r"$\rho_{food}$", r"$\rho_{photo}$", "$p_E$",  "net $N$ uptake by $H$", "net $N$ uptake by $E$", "$r_H$", "$r_E$"]
+    f = [muH, muE, rhoDOC, rhoPhoto, pE, netNH, netNE, rE, rH]
+
+
+    data = np.r_[y, [y[1,:]/y[0,:]], f ]
+    df = pd.DataFrame(np.transpose(data), index=t, columns=columns)
+
+    if save:
+        df.to_csv("sims/sim_" + save)
+
+    return df
+
+
+def make_df2(t, y, funcs, save = ""):
+    """Makes a pandas dataframe of a given simulation solution. Save the simulation as csv file if specified
     
-    twin2 = ax2.twinx()
-    twin2.plot(t,muE,"C2", label=r"$\mu_{E}$")
-    twin2.plot(t,pE,"C2", ls ="dashed", label=r"$p_{E}$")
-    ax2.plot(t,muH,"C0", label=r"$\mu_{H}$")
-    ax2.plot(t,rhoPhoto,"C3", ls ="dashed", label=r"$\rho_{photo}$")
-    ax2.plot(t,rhoDOC,"k", ls="dashed", label=r"$\rho_{Food}$")
+    Args:
+        t (array-like): Time vector of solution. Will set index for dataframe
+        y (array-like): Solution to numerical integration
+        funcs (array-like): The collection of function used to solve the ODE (what is returned by make_funcs())
 
-
-    ax1.set_ylabel(r"mol C /m$^2$")
-    twin1.set_ylabel("E biomass/H iomass")
-    ax2.set_ylabel(r"d$^{-1}$")
-    twin2.set_ylabel(r"d$^{-1}$")
-    ax2.set_xlabel("d")
-
-
-    ax1.legend(loc="center left")
-    twin1.legend(loc="lower right")
-    ax2.legend(loc="upper right")
-    twin2.legend(loc="lower right")
-
-
-def plotCN(t,y,funcs,cD):
-    """Ploting nutrien and carbon flows for a given simulation"""
-    H, E, N, C = y
-    rE, rH, pE, muH, muE, uH, uE, rhoPhoto, rhoDIN, rhoDOC, rhoDON, eH, eE  = funcs
-
-    fig, (ax1,ax2,ax3) = plt.subplots(nrows=3, ncols=1)
-
-    ax1.plot(t,N,"C4", label = "$N$")
-    twin1 = ax1.twinx()
-    twin1.plot(t,C,"k",label="C")
-
-    ax2.plot(t,uE,"C2", ls ="dashed", label=r"$u_E$")
-    ax2.plot(t,uE*E/H,"C2", label=r"$u_E\frac{E}{H}$")
-    ax2.plot(t,rhoDIN,"C0", ls ="dashed", label=r"$\rho_{DIN}$")
-    ax2.plot(t,uH,"C0", label=r"$u_H$")
-    ax2.plot(t,cD[delC]*(cD[NI]-N),"C4", ls ="dashed", label=r"$\delta_N (N_I-N)$")
- 
-    ax3.plot(t, rH,"C0", label=r"$r_{H}$")
-    ax3.plot(t, rE*E/H,"C0", ls ="dashed", label=r"$r_{E}\frac{E}{H}$")
-    ax3.plot(t, pE*E/H,"C2", ls ="dashed", label=r"$p_{E}\frac{E}{H}$")
-    ax3.plot(t, cD[delC]*(cD[CI]-C),"k", ls ="dashed", label=r"$\delta_C (C_I-C)$")
-
-    ax1.legend(loc="center left")
-    ax2.legend()
-    twin1.legend(loc="center right")
-    ax3.legend()
-
-    ax1.set_ylabel("mol N/mol C")
-    twin1.set_ylabel("mol CO$_2$/mol C")
-    ax2.set_ylabel("mol N/mol C/d")
-    ax3.set_ylabel("mol C/mol C/d")
-    ax3.set_xlabel("days")
-
-
-def plot_sim_2(t,y,funcs,cD):
-    """Ploting a given simulation in matplotlib"""
-    H, E, N, C = y
-    rE, rH, pE, muH, muE, uH, uE, rhoPhoto, rhoDIN, rhoDOC, rhoDON, eH, eE = funcs
-
-    fig1, axs = plt.subplots(2,1)
-    ax1, ax2 = axs[0],axs[1]
-    ax1.semilogy(t,H,"C0",label="H")
-    ax1.semilogy(t,E,"C2",label="E")
-    twin1 = ax1.twinx()
-    twin1.plot(t,E/H,"C1", label = "$E/H$")
+    Returns:
+        pandas.DataFrame: Solution given as dataframe
+    """
     
-    ax1.legend(loc="center left")
-    twin1.legend(loc="center right")
-    ax1.set_ylabel(r"mol C /m$^2$")
-    twin1.set_ylabel("E biomass/H iomass")
-    ax1.set_xlabel("$d$")
+    sim_values = np.r_[y, [y[1]/y[0]], funcs]
+    names = info.index.to_numpy()
+    data = []
+    for name, sol in zip(names, sim_values):
+        for time, value in zip(t, sol):
+            data.append( {"time": time, "value": value, "name": name, "type": info.loc[name, "type"]} )
+    df = pd.DataFrame(data)
+
+    if save:
+        df.to_csv("sims/sim_" + save)
+
+    return df
 
 
-    ax2.plot(t,N,"C4", label = "$N$")
-    twin2 = ax2.twinx()
-    twin2.plot(t,C,"k",label="C")
-    
-    ax2.legend(loc="center left")
-    twin2.legend(loc="center right")
-    ax2.set_ylabel("mol N/mol C")
-    twin2.set_ylabel("mol CO$_2$/mol C")
-    ax2.set_xlabel("$d$")
+def plot_sim(df, var_list, ax=None, yscale="log", ybottom=None, ytop=None):
+    """Plotting the variables of a given simulation in matplotlib"""
+    p = sns.color_palette("colorblind")
+    color_map = {
+        "H": p[0], "E": p[2], "N": p[4], "C": p[3], "E/H": p[1],
+        r"$\mu_H$": p[0], r"$\mu_E$": p[2], r"$\rho_{food}$": p[7], r"$\rho_{photo}$": p[1],
+        "net $N$ uptake by $H$": p[0], "net $N$ uptake by $E$": p[2], 
+        "$p_E$": p[2], "$r_H$": p[0], "$r_E$": p[2]
+    }
+
+    data = df[var_list]
+
+    if not ax:
+        sim_fig, ax = plt.subplots()
+
+    sns.set_theme(context="talk", style="ticks")
+    sns.lineplot(data, palette=color_map, ax=ax, dashes=False)   # dashes = [(1,0), (1,1), osv.]
+
+    ax.set_yscale(yscale)
+    ax.set_ylim(bottom=ybottom, top=ytop)
+    ctx = sns.plotting_context("talk")
+    ax.tick_params(axis="both",labelsize=ctx["axes.labelsize"])
+    ax.margins(y=0.05)
+
+    return ax
 
 
-    fig3, ax3 = plt.subplots(1,1)
-    twin3 = ax3.twinx()
-    twin3.plot(t,muE,"C2", label=r"$\mu_{E}$")
-    twin3.plot(t,pE,"C2", ls ="dashed", label=r"$p_{E}$")
-    ax3.plot(t,muH,"C0", label=r"$\mu_{H}$")
-    ax3.plot(t,rhoPhoto,"C3", ls ="dashed", label=r"$\rho_{photo}$")
-    ax3.plot(t,rhoDOC,"k", ls="dashed", label=r"$\rho_{Food}$")
+def plot_sim_2(df, var_list, scale="log", ax=None):
 
-    ax3.legend(loc="upper right")
-    twin3.legend(loc="lower right")
-    ax3.set_ylabel("$d^{-1}$")
-    ax3.set_xlabel("d")
+    df = df[df["name"].isin(var_list)]
+    palette = [info.loc[var, "color"] for var in var_list] 
 
+    sns.set_theme(context="talk", style="ticks")
+    ax = sns.lineplot(df, x="time", y="value", hue="name", palette=palette, ax=ax, legend="brief")
+    ax.set_yscale(scale)
+    plt.show()
 
-    fig4, ax4 = plt.subplots(1,1)
-    ax4.plot(t,uE*E/H,"C2", label=r"$u_E\frac{E}{H}$")
-    ax4.plot(t,uH - rhoDIN + (cD[mH]*cD[QH]+cD[mE]*cD[QE]*E/H),"C0", label="H net N-uptake")
-    ax4.plot(t,0*E+(cD[mH]*cD[QH]+cD[mE]*cD[QE]*E/H), "C0", ls ="dashed", label=r"$m_HQ_H+m_EQ_E\frac{E}{H}$")
-    ax4.plot(t,-cD[delN]*(cD[NI]-N),"C4", ls ="dashed", label=r"$\delta_N (N-N_I)$")
-
-    ax4.legend()
-    ax4.set_xlabel("d")
-    ax4.set_ylabel("mol N/mol C/d")
-
-    return ax1,ax2,ax3,ax4
 
 
 ##### Symbolic function ####################################################
@@ -186,20 +174,21 @@ def checkSymbolicStab(yStar, cD):
 
     F = sp.Matrix(endoSymbolic(state[0],state[1])).subs(cD)
     J = F.jacobian([H,E,N,C])
-    
-    eig = J.subs([(H,yStar[0]), (E,yStar[1]), (N,yStar[2]), (C,yStar[3])]).eigenvals()
+    J = J.subs([(H,yStar[0]), (E,yStar[1]), (N,yStar[2]), (C,yStar[3])])
+
+    eig, _ = la.eig(np.array(J.tolist(), dtype=float))
     stab, numDir = True, 0
 
-    for val, mult in eig.items():
+    for val in eig:
         if sp.re(sp.N(val)) > 0:
             stab = False
             numDir += 1
 
-    return stab#, numDir
+    return stab #, numDir
 
 
 def checkIllegal(state,yStar,cD):
-    rE, rH, pE, muH, muE, uH, uE, rhoPhoto, rhoDIN, rhoDOC, rhoDON, eH, eE = makeFuncs(0,yStar,cD)
+    muH, muE, rhoDOC, rhoPhoto, pE, rH, rE, netNH, netNE, eH, eE = makeFuncs(0,yStar,cD)
     currState = [bool(eH<(1/(cD[s]+1))) , bool(eE<(1/(cD[s]+1)))]
     return currState == state
 
@@ -235,39 +224,64 @@ def _curate_fps(fixed_points,state,cD):
     return sorted(curated_fps,key=_key,reverse=True)
 
 
-def find_all_fps(cons=[], ignore_H_1 = True):
+def find_all_fps(cons=[], ignore_H_lim = True):
     """Symbilicly finds all feasible fixed point of the function
     
-    Args:"""
-    state_list = [(0,0), (0,1)] if ignore_H_1 else [(0,0), (0,1), (1,1), (1,0)]
+    Args:
+        cons (list): list pair (para, value), where parameter values should be changed from default value to new value
+        ignore_H_lim (bool): If the symbolic solver should ignore the possibility of H being N-limited. No feasible fixed points should exist and ignoring this significantly increases the speed
+
+    Returns:
+        list: list of fixed points (given as tuples)
+    """
+    state_list = [(0,0), (0,1)] if ignore_H_lim else [(0,0), (0,1), (1,1), (1,0)]
     cD = makeCons(cons)
 
-    fps = []
-    for i, j in state_list:
-        fps = fps + _curate_fps(checkFixedPoint(i,j,cD), [i,j], cD)
+    if not ignore_H_lim:
+        fps = []
+        for i, j in [(0,0), (0,1), (1,1), (1,0)]:
+            fps = fps + _curate_fps(checkFixedPoint(i,j,cD), [i,j], cD)
+        return fps #OBS unorded here!
+    
+    fps = [None]*4
+    E_not_N_lim = _curate_fps(checkFixedPoint(0,0,cD), [0,0], cD)
+    E_N_lim     = _curate_fps(checkFixedPoint(0,1,cD), [0,1], cD)
 
-    for i in range(len(fps)):
-        fp = fps[i]
+    i = 0
+    for fp in E_not_N_lim:
         if fp[1] == 0.0:
-            fps.remove(fp)
-            fps.insert(0,fp)
+            fps[0] = fp
+        else:
+            fps[1+i] = fp
+            i += 1
+
+    i = 0
+    for fp in E_N_lim:
+        if fp[1] == 0.0:
+            fps[0] = fp
+        else:
+            fps[2+i] = fp
+            i += 1
 
     return fps
 
 
-def makeSymbBifur(para,span,state=[0,1],cons=[]): 
-    pValues = np.linspace(span[0],span[1],45)
+def makeSymbBifur(para,span,cons=[],ignore_H_lim=True): 
+    pValues = np.linspace(span[0],span[1],30)
     fixList = []
-    for p in pValues:
-        cD = makeCons(cons+[(para,p)])
-        fixedPoints = sorted(checkFixedPoint(state[0],state[1],cD),key=_key,reverse=True)
-        curated_fps = _curate_fps(fixedPoints,state,cD)
-        for i in range(len(curated_fps)):
-            fp = curated_fps[i]
-            num = assign_fp_number(fp,state,i)
-            stab = checkSymbolicStab(fp, cD)
-            fixList.append( np.concatenate([ [p], fp, [num], [stab]]) )
-            print(f"{para}: {p}, H: {round(fp[0],20)}, E: {round(fp[1],20)}, N: {round(fp[2],20)}, C: {round(fp[3],20)}, fp: {num}, stable = {stab}")
+    try:
+        for p in tqdm(pValues,desc=f"Progress for parameter: {para}, in range: {span}", unit="run"):
+            new_cons = cons + [(para,p)]
+            cD = makeCons(new_cons)
+            curated_fps = find_all_fps(new_cons, ignore_H_lim)
+            for i, fp in enumerate(curated_fps):
+                if fp != None:
+                    stab = checkSymbolicStab(fp, cD)
+                    fixList.append( np.concatenate([ [p], fp, [i], [stab]]) )
+                    tqdm.write(f"{para}: {p}, H: {round(fp[0],20)}, E: {round(fp[1],20)}, N: {round(fp[2],20)}, C: {round(fp[3],20)}, fp: {i}, stable = {stab}")
+                    #sys.stdout.flush()
+    except KeyboardInterrupt:
+        tqdm.write("\n>>>> Interupted by user")
     return np.array(fixList)
 
 
@@ -279,12 +293,12 @@ def make_jac(f):
 def check_stab(yStar,cD):
     """Checking stability of fixed point using automatic differentiation
     
-    Input
-    yStar: array-like fixed point
-    cD: dict or dataframe of parametervalues
+    Args:
+        yStar (array-like): The fixed point
+        cD (dict or dataframe): Dictionary of parametervalues
     
-    Output
-    Bool: True if stable, False otherwise"""
+    Returns:
+        Bool: True if stable, False otherwise"""
     
     J = make_jac(lambda y: endo(0,y,cD,minFunc=jax.numpy.minimum))
     J_subbed = jax.numpy.array(J(jax.numpy.array(yStar)))
@@ -411,7 +425,7 @@ def makeNumBifur2(para,span,fixedPoints,cons=[]):  ## Obs doesn't check if fixed
 ##### Bifurcation diagrams by simulations #####################################
 def simpleBifur(para, span, cons = []):    ## NB Modified simSystem before 
     y0 = [60, 1, 0.1, 0.1]                 ## Add y0 argument
-    tEnd = 1000
+    tEnd = 1000                                                                 ## THIS WHOLE SECTION IS OUTDATED! REMOVE IF NOT RECYCLED!!
     paraList = np.linspace(span[0],span[1],200)
 
     lastList = [[],[],[]]
@@ -431,13 +445,13 @@ def simpleBifur(para, span, cons = []):    ## NB Modified simSystem before
 def findOsc(y, tol = 1e-3):
     """Checks if vector oscilate at some period and returns mins and max of the oscillations
 
-    Arguments:
-    y: array like, vector of which oscillation is check (OBS: should be evenly spaced in timesteps)
-    tol: float tolerence of solution 
+    Args:
+        y (array-like): Vector of which oscillation is check (OBS: should be evenly spaced in timesteps)
+        tol (float): Tolerence of solution 
 
     Returns:
-    bool: False if convergence to fixed point, True otherwise
-    list: Max and min values as lists
+        bool: False if convergence to fixed point, True otherwise
+        list: Max and min values as lists
     """
     cv = stats.variation(y)  ## checking cv to see if no oscillations are occuring
     if cv<=tol:
@@ -551,7 +565,8 @@ def plot_aut_bifur():
         plt.plot(fix_list[stable,0],   fix_list[stable,1],   color = "C0", marker = m,               ms= ms, alpha=alpha, ls="")
     plt.show()
 
-def make_heat_graph(para1, para2, span1, span2, grid_size = 10):
+
+def make_heat_graph(para1, para2, span1, span2, grid_size = 10, cons=[]):
     para1_list = np.linspace(span1[0],span1[1], grid_size)
     para2_list = np.linspace(span2[0],span2[1], grid_size)
     heat_matrix = np.empty(shape=(len(para1_list),len(para2_list)))
@@ -559,13 +574,13 @@ def make_heat_graph(para1, para2, span1, span2, grid_size = 10):
         p1 = para1_list[i]
         for j in range(len(para2_list)):
             p2 = para2_list[j]
-            cD = makeCons([(para1,p1),(para2,p2)])
+            cD = makeCons(cons + [(para1,p1),(para2,p2)])
             fp_list = _curate_fps(checkFixedPoint(0, 1, cD), [0,1] ,cD)
             print(f" {para1.name} = {p1}, {para2.name} = {p2},  fps = {fp_list}")
             if len(fp_list) == 3:                           # <--- Normal case with three fixed points present
-                symb_load = fp_list[1][1]/fp_list[1][0]
+                symb_load = fp_list[1][0]
             elif len(fp_list) == 2 and fp_list[1][1] > 0:   # <--- Special case where no trivial fixed point exists
-                symb_load = fp_list[1][1]/fp_list[1][0]
+                symb_load = fp_list[1][0]
             elif len(fp_list) == 1:                         # <--- When only trivial fixed point exists we check if it is stable or unstable
                 if checkSymbolicStab(fp_list[0],cD):        #      if unstable, the parasitic state should exists a be an attractor. We choose to interpret this as no stable fixed point exists
                     symb_load = 0
@@ -578,7 +593,7 @@ def make_heat_graph(para1, para2, span1, span2, grid_size = 10):
     
     df = pd.DataFrame(heat_matrix[::-1], index = np.round(para1_list[::-1], 2), columns = np.round(para2_list, 2) )
     print(df)
-    ax = sns.heatmap(df, linewidth=0.5, vmin=0, vmax=0.25, cbar_kws={"label": "$E/H$"})
+    ax = sns.heatmap(df, linewidth=0.5, vmin=0, cbar_kws={"label": "$H$"}, annot=True, cmap="viridis")  #cmap="magma", "plasma", "cividis"
 
     ax.set_xticks(np.linspace(0.5, heat_matrix.shape[1] - 0.5, 5))           # Attempt at faking a continous axis
     ax.set_xticklabels(np.round( np.linspace(span2[0], span2[1], 5), 3))     #
@@ -590,50 +605,197 @@ def make_heat_graph(para1, para2, span1, span2, grid_size = 10):
 
     #plt.show()
     name1, name2 = para1.name.replace("\\","").replace("{","").replace("}",""), para2.name.replace("\\","").replace("{","").replace("}","")
-    plt.savefig(f"figs/heat_graph_{name1}_{name2}.png")
+    plt.savefig(f"figs/plotted_sims/heat_graph_{name1}_{name2}.png")
+    plt.show()
 
 
-def make_init(ranges = None):
-    ranges = ranges or [[0,166], [0,1], [0,0.06], [1e-5,0.22]]
+def make_init(num_samples, ranges = None):
+    ranges = ranges or [[0,150], [0,1], [0,0.06], [1e-5,0.22]]
     rand_vec = np.random.rand(4)
     
-    y0 = []
-    for i in range(len(ranges)):
-        val = ranges[i][0] + (ranges[i][1]-ranges[i][0])*rand_vec[i]
-        if i == 1:
-            val = val*y0[0]
-        y0.append(val)
+    sample = []
+    for j in range(num_samples):
+        y0 = []
+        for i in range(len(ranges)):
+            val = ranges[i][0] + (ranges[i][1]-ranges[i][0])*rand_vec[i]
+            if i == 1:
+                val = val*y0[0]
+            y0.append(val)
+        sample.append(y0)
     
     return y0
 
 
-def plot_area_of_attraction(num_lines = 10, cons = []):
-    fps = find_all_fps(cons)
-    healthy = fps[-1]
-    print(fps)
-    mc = "k"
-    for i in range(num_lines):
-        y0 = make_init([[healthy[0]]*2, [healthy[1]/healthy[0]]*2, [0.0001,0.07], [0.0001,0.22]])
-        t, y, funcs, cD = simSystem(y0,[0,1500],cons=cons)
-        print(f"{y0}  --->   {y[:,-1]}")
-        for fp_num, fp in enumerate(fps):
-            diff = np.linalg.norm( y[:,-1] - np.array(fp, dtype="float64"))
-            if diff < 1e-1:
-                mc = "g" if fp_num == 3 else "r"
-                print(fp_num)
-                break
-        plt.plot(y0[2], y0[3], marker = "o", color=mc)
+def lhc_sampling(num_samples, ranges = None):
+    ranges = ranges or [[1,150], [0, 0.8], [0, 0.02], [1e-5,0.22]]
+    ranges = np.array(ranges)
+    sample = stats.qmc.LatinHypercube(d = len(ranges)).random(n=num_samples)
+    sample_scaled = stats.qmc.scale(sample, l_bounds = ranges[:,0], u_bounds=ranges[:,1])
+    sample_scaled[:,1] = sample_scaled[:,0] * sample_scaled[:,1]
+    return sample_scaled
 
-    for fp in fps:
-        plt.plot(fp[2], fp[3], marker = "x", color="k")
+
+def check_conv(y_end, fps, cons, second_attempt = False):
+    """Checks which fixed point a solution has converged to.
     
-    plt.ylabel("C")
-    plt.xlabel("N")
+    Args:
+        y_end (list): End-point of a solution.
+        fps (list): List of fixed points in known sorted order.
+
+    Returns:
+        int: Integer indicating which fixed point the system has converged to.
+    """
+    for fp_num, fp in enumerate(fps):
+        if fp == None: continue
+        diff = np.linalg.norm( y_end - np.array(fp, dtype="float64") )
+        if diff < 5e-1:
+            return fp_num
+    if not second_attempt:
+        t, y, funcs, cD = simSystem(y_end,[0,5000],cons=cons)
+        return check_conv(y[:,-1],fps,cons,second_attempt=True)
+    #print(f"Failure to converge after second attempt\n y_end: {y_end}")
+    return 0   #return 0 when no convergence happen, species probably die update the count in some way             #raise ValueError("OBS! Solution did not converge to any fixed point in list")
+
+
+def _to_edges(c):
+    dc = np.diff(c) / 2
+    edges = np.concatenate(([c[0] - dc[0]], c[:-1] + dc, [c[-1] + dc[-1]]))
+    return edges
+
+
+def plot_area_of_attraction(plot_vars, l_bounds, u_bounds, grid_size = 10, cons = [], healthy_fp = True): # under construction
+    x_ind, y_ind = plot_vars
+    fps = find_all_fps(cons)
+    healthy, unhealthy = fps[-1], fps[0]
+    y0 = list(healthy) if healthy_fp == True else list(unhealthy)
+    var1_list, var2_list = np.linspace(l_bounds[0], u_bounds[0], grid_size), np.linspace(l_bounds[1], u_bounds[1], grid_size)
+
+    if x_ind in [-1, 4]:
+        plt.plot(y0[1]/y0[0], y0[y_ind], "rx")
+    elif y_ind in [-1, 4]:
+        plt.plot( y0[x_ind], y0[1]/y0[0], "rx")
+    else:
+        plt.plot(y0[x_ind], y0[y_ind], "rx")
+
+
+    mat = np.empty(shape=(grid_size,grid_size))
+
+    with tqdm(total=grid_size**2, desc = "Total progress") as pbar:
+        for i, var1 in enumerate(var1_list):
+            for j, var2 in enumerate(var2_list):
+                pbar.update(1)
+                if x_ind != -1 and x_ind !=4:
+                    y0[x_ind] = var1
+                else:
+                    y0[1] = y0[0]*var1
+                if y_ind != -1 and y_ind != 4: 
+                    y0[y_ind] = var2 
+                else: 
+                    y0[1] = y0[0]*var2
+                
+                t, y, funcs, cD = simSystem(y0,[0,1500],cons=cons)
+                fp_num = check_conv(y[:,-1],fps,cons)
+                mat[i,j] = fp_num // 2
+
+
+    print(mat)
+    plt.pcolormesh(_to_edges(var1_list), _to_edges(var2_list), np.transpose(mat), cmap="Greens", shading="auto", vmin=0)
+    plt.colorbar()
+
+   
+    label_list = ["H", "E", "N", "C", "E/H"]
+    plt.xlabel(label_list[x_ind])
+    plt.ylabel(label_list[y_ind])
     plt.show()
 
 
-if __name__ == "__main__":
-    #make_heat_graph(to,pmax,[0.5,2],[0.25,1], 10)
+def prob_of_states(n, plot_vars, ranges = None, cons = [], save_fig=True, grid_size = 40):
+    x_ind, y_ind = plot_vars
+    fps = find_all_fps(cons)
+    print(fps)
+    healthy, unhealthy = fps[-1], fps[1]
 
-    plot_area_of_attraction(num_lines=200, cons=[(s,1.3)])
+    init_list = lhc_sampling(n, ranges)
+    num_healthy, mat = 0, []
+    color_list = ["C1", "C0"]
+
+    for y0 in tqdm(init_list):
+        t, y, funcs, cD = simSystem(y0,[0,1000],cons=cons)
+        fp_num = check_conv(y[:,-1],fps,cons)
+
+        x = y0[x_ind] if (x_ind != -1 and x_ind != 4) else y0[1]/y0[0]
+        y = y0[y_ind] if (y_ind != -1 and y_ind != 4) else y0[1]/y0[0]
+
+        mat.append([x, y, fp_num//2])
+
+        if fp_num == 3: num_healthy += 1
+        plt.plot(x, y, marker = "o", ls = "", color = color_list[fp_num//2], alpha = 0.2)
+        
     
+    print(f"Probability of convergence to healthy state {num_healthy/n}")
+    label_list = ["H", "E", "N", "C", "E/H"]
+    plt.xlabel(label_list[x_ind])
+    plt.ylabel(label_list[y_ind])
+
+    for fp, name in [(healthy,"Healthy"), (unhealthy,"Unhealthy")]:
+        x_star = fp[x_ind] if (x_ind != -1 and x_ind != 4) else fp[1]/fp[0]
+        y_star = fp[y_ind] if (y_ind != -1 and y_ind != 4) else fp[1]/fp[0]
+        plt.plot(x_star, y_star, marker = "x", color = "k")
+        plt.text(x_star*1.01, y_star*1.01, name+" state")
+
+        if x_ind in [-1, 4] or y_ind in [-1,4]:
+            break
+
+
+    data = np.array(mat)                                          ### OBS: edit to more readable names 
+    x, y, z = data[:,1], data[:,0], data[:,2]
+    sum_v, xedges, yedges = np.histogram2d(x, y, bins=grid_size, weights=z)
+    count, _, _ = np.histogram2d(x, y, bins=[xedges, yedges])
+    avg = np.divide(sum_v, count, out=np.zeros_like(sum_v), where=count>0)
+
+    plt.figure()
+    plt.pcolormesh(yedges, xedges, avg, cmap="Greens",vmin=0,vmax=1)  #.imshow(avg, interpolation='bilinear') 
+    plt.colorbar(label="Probalility")
+
+    for fp, name in [(healthy,"Healthy"), (unhealthy,"Unhealthy")]:
+        x_star = fp[x_ind] if (x_ind != -1 and x_ind != 4) else fp[1]/fp[0]
+        y_star = fp[y_ind] if (y_ind != -1 and y_ind != 4) else fp[1]/fp[0]
+        plt.plot(x_star, y_star, marker = "x", color = "k")
+        plt.text(x_star*1.01, y_star*1.01, name+" state")
+
+        if x_ind in [-1, 4] or y_ind in [-1,4]:
+            break
+
+
+    plt.xlabel(label_list[x_ind])
+    plt.ylabel(label_list[y_ind])
+
+    if save_fig:
+        name = ""
+        for p, v in cons:
+            name = name + f"_{p.name}={v}"
+        plt.savefig("figs/plotted_sims/aoa" + name + ".png" ,dpi=300, bbox_inches="tight")
+        np.savetxt("sims/aoa_" + name + "_raw.txt", data)
+
+    plt.show()
+    return
+
+
+if __name__ == "__main__":
+    #make_heat_graph(s,uEmax,[1,1.5],[0.0001,0.06], 10, cons = [(pmax, 0.45), (uEmax,0.033), (uHmax,0.0045),
+#
+    #     (KCO2, 0.02), (KNE, 0.03),   (KNH, 0.0001),
+#
+    #     (NI, 0.001), (CI, 0.09)])  
+
+    #plot_area_of_attraction([2,-1], [1e-5, 0.01], [0.06, 0.5], grid_size=10, cons=[(s,1.35)]) #,(mE,0.06),(KNE,0.01),(CI,0.13)])
+
+    #prob_of_states(30000, [2, -1], cons=[(s,1.0)], save_fig=True)
+
+    t,y,funcs,cD = simSystem([25,0.01, 0.001, 0.01], [0,500])
+    df = make_df2(t,y,funcs, save="single_sim")
+    
+    plot_sim_2(df, ["H", "E"])
+
+    
+

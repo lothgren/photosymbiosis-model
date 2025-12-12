@@ -5,13 +5,16 @@ import numpy as np
 import sympy as sp
 
 H, E, N, C = sp.symbols("H E N C", real=True)
-s, to, b, pmax, KCO2, delC, CI, mE, mH, rho0, HCap, delN, NI, KNE, uEmax, KNH, uHmax, QE, QH, QFood = sp.symbols(
-    r"s TO \beta p_{\max} K_{CO_2} d_C C_I m_E m_H rho_{Food\,\max} H_{\max} d_N N_I K_E u_{E\,\max} K_H u_{H\,\max} Q_E Q_H Q_{food}", real=True)
+s, to, b, pmax, KCO2, delC, CI, mE, mH, rho0, HCap, delN, NI, KNE, uEmax, KNH, uHmax, QE, QH, QFood, eps = sp.symbols(
+    r"s TO \beta p_{\max} K_{CO_2} \delta_C C_I m_E m_H rho_{Food\,\max} H_{\max} \delta_N N_I K_E u_{E\,\max} K_H u_{H\,\max} Q_E Q_H Q_{food} \epsilon", real=True)
 
 
 def makeCons(changes=[]):
-    paraValues = {s: 1, to: 1, b: 0.5, pmax: 0.7, KCO2: 0.01, delC: 0.5, CI: 0.1, mE: 0.1, mH: 0.03, rho0: 0.09, HCap: 166, 
-                  delN: 0.2, NI:0.005, KNE: 0.04, uEmax : 0.05, KNH: 0.01, uHmax : 0.01, QE: 0.15, QH: 0.15, QFood: 0.15}
+    paraValues = {s: 1, to: 1, b: 0.5, pmax: 0.45, KCO2: 0.02, delC: 0.5, CI: 0.11, mE: 0.03, mH: 0.03, rho0: 0.07, HCap: 166, 
+                  delN: 0.5, NI:0.001, KNE: 0.02, uEmax : 0.035, KNH: 0.0001, uHmax : 0.0045, QE: 0.15, QH: 0.15, QFood: 0.15, eps: 0}
+
+    #paraValues = {s: 1, to: 1, b: 0.5, pmax: 0.7, KCO2: 0.01, delC: 0.5, CI: 0.1, mE: 0.1, mH: 0.03, rho0: 0.09, HCap: 166, 
+    #              delN: 0.2, NI:0.005, KNE: 0.04, uEmax : 0.05, KNH: 0.01, uHmax : 0.01, QE: 0.15, QH: 0.15, QFood: 0.15}
     for change in changes:
         paraValues[change[0]] = change[1]
     return paraValues
@@ -37,25 +40,29 @@ def makeFuncs(t, y, cD, minFunc = np.minimum):
     nH = ( (rhoDON + uH)/(rhoDOC+rhoPhoto) )/cD[QH]
     eH  = minFunc(1/(cD[s]+1), nH)
 
-    rH = cD[b]* ( cD[s]*eH*(rhoDOC + rhoPhoto) + cD[mH]*cD[to] )
-    rE = cD[b]* ( cD[s]*eE*pE + cD[mE]*cD[to] )
+    rH = cD[b]* ( cD[s]*eH*(rhoDOC + rhoPhoto) + cD[mH]*cD[to] )    #
+    rE = cD[b]* ( cD[s]*eE*pE + cD[mE]*cD[to] )                     # Total respired CO2 from H and E
 
-    rhoDIN = (1-eH/nH)*(rhoDON + uH) + (1-eE/nE)*uE*E/H + cD[mH]*cD[to]*cD[QH] + cD[mE]*cD[to]*cD[QE]*E/H  ## OBS added E return of nutrients!
+    lH = (1-eH/nH)*(rhoDON + uH)      #
+    lE = (1-eE/nE)*uE                 # Nutrients leaking in from H and E
+
+    netNH = -lH + uH
+    netNE = - (lE - uE)*E/H
 
     muH = eH*(rhoDOC + rhoPhoto)
     muE = eE*pE
 
-    return rE, rH, pE, muH, muE, uH, uE, rhoPhoto, rhoDIN, rhoDOC, rhoDON, eH, eE
-
+    return muH, muE, rhoDOC, rhoPhoto, pE, rH, rE, netNH, netNE, eH, eE
+    
 
 def endo(t, y, cD, minFunc = np.minimum):
     H, E, N, C = y
-    rE, rH, pE, muH, muE, uH, uE, rhoPhoto, rhoDIN, rhoDOC, rhoDON, eH, eE  = makeFuncs(t,y,cD,minFunc)
+    muH, muE, rhoDOC, rhoPhoto, pE, rH, rE, netNH, netNE, eH, eE  = makeFuncs(t,y,cD,minFunc)
 
     dH = (muH-cD[mH]*cD[to])*H
-    dE = (muE-cD[mE]*cD[to])*E
+    dE = (muE-cD[mE]*cD[to] - cD[eps])*E
 
-    dN = rhoDIN - uH - uE*E/H + cD[delN]*(cD[NI]-N)
+    dN = cD[mH]*cD[to]*cD[QH] + cD[mE]*cD[to]*cD[QE]*E/H + cD[delN]*(cD[NI]-N) - netNH - netNE
     dC  = rH + rE*E/H - pE*E/H + cD[delC]*(cD[CI]-C)
 
     return [dH,dE,dN,dC]
@@ -79,19 +86,19 @@ def endoSymbolic(nLimH = False, nLimE = True):
     rH = b* ( s*eH*(rhoDOC + rhoPhoto) + mH*to )
     rE = b* ( s*eE*pE + mE*to )
 
-    rhoDIN = (1-eH/nH)*(rhoDON + uH) +( mH*to*QH + mE*to*QE*E/H)
+
+    netH = (1-eH/nH)*(rhoDON + uH) - uH
+    netE = eE/nE*uE                                   #uE if nLimE else eE*QE*pE
 
     muH = eH*(rhoDOC + rhoPhoto)
     muE = eE*pE
 
     dH = (muH-mH*to)*H
-    dE = (muE-mE*to)*E
-    dN = rhoDIN - uH - uE*E/H + delN*(NI-N)
+    dE = (muE-mE*to-eps)*E
+    dN = mH*to*QH + mE*to*QE*E/H + netH - netE*E/H + delN*(NI-N)
     dC  = rH + rE*E/H - pE*E/H + delC*(CI-C)
 
     return [dH,dE,dN,dC]
-
-
 
 
 def symbDeath(t,y,cD):
@@ -105,7 +112,7 @@ loadStop.terminal = True
 
 def _plotLimFac(t, y, cD):
     H, E,  N, C = y
-    rE, rH, pE, muH, muE, uH, uE, rhoPhoto, rhoDIN, rhoDOC, rhoDON, eH, eE  = makeFuncs(t,y,cD)
+    muH, muE, rhoDOC, rhoPhoto, pE, rH, rE, netNH, netNE, eH, eE  = makeFuncs(t,y,cD)
 
     #plt.style.use('tableau-colorblind10')
     fig, (ax1,ax2,ax3) = plt.subplots(nrows=3, ncols=1)
@@ -114,9 +121,9 @@ def _plotLimFac(t, y, cD):
     twin1 = ax1.twinx()
     twin1.plot(t,C,"k--",label="C")
 
-    ax2.plot(t,uE,"g--", label=r"$u_E$")
-    ax2.plot(t,uE*E/H,"g", label=r"$u_E\frac{E}{H}$")
-    ax2.plot(t,uH - rhoDIN + (cD[mH]*cD[QH]+cD[mE]*cD[QE]*E/H),"b", label=r"net uptake H")
+    #ax2.plot(t,uE,"g--", label=r"$u_E$")
+    ax2.plot(t,netNE,"g", label=r"$(u_E-l_E)\frac{E}{H}$")
+    ax2.plot(t, netNH,"b", label=r"$u_H-l_H$")
     ax2.plot(t,0*E+(cD[mH]*cD[QH]+cD[mE]*cD[QE]*E/H),"b--", label=r"$m_HQ_H+m_EQ_E\frac{E}{H}$")
     ax2.plot(t,cD[delN]*(cD[NI]-N), "r--", label=r"$\delta_N (N_I-N)$")
  
@@ -149,20 +156,24 @@ if __name__ == "__main__":
     import scipy.integrate as integ
     import scipy.signal as signal
     
-    y0 = [1.36137566e+02, 1.56016603e+01, 0.002, 0.136] 
+    y0 = [25,0.1,0.0001,0.001]
     tEnd = 1500
-    cD = makeCons([]) 
-     #   (b,0.5), (s,1),
-     #   (pmax,0.45), (KCO2,0.01), (uEmax,0.02), (KNE,0.01), (mE,0.03), 
-     #                             (uHmax,0.005), (KNH,0.0001), (mH,0.03),
-     #   (NI,0.001), (delN,0.15), (CI,0.15), (delC,0.4), (rho0,0.07)
-     #   ])
+    cD = makeCons([ (s,1.0),
+        (pmax, 0.45), (uEmax,0.033), (uHmax,0.0045),
+
+        (KCO2, 0.02), (KNE, 0.03),   (KNH, 0.0001),
+
+        (NI, 0.001), (CI, 0.09)
+                   ])   #[(mE,0.06),(uEmax,0.03),(KNE,0.01),(CI,0.13)])   
+    cD2 = makeCons([(pmax, 0.7), (KCO2, 0.01), (delC, 0.5), (CI, 0.1), (mE, 0.1), (mH, 0.03), (rho0, 0.09), (HCap, 166), 
+                  (delN, 0.2), (NI, 0.005), (KNE, 0.04), (uEmax, 0.05), (KNH, 0.01), (uHmax, 0.01)])
+
     sol = integ.solve_ivp(endo, y0=y0, t_span=[0,tEnd], args=(cD,), dense_output=False, vectorized=True, method="Radau", max_step = np.inf, rtol=1e-8, atol = 1e-8, events=[])
     print(sol)
 
     ### Plotting 
     H, E, N, C = sol.y
-    rE, rH, pE, muH, muE, uH, uE, rhoPhoto, rhoDIN, rhoDOC, rhoDON, eH, eE = makeFuncs(sol.t,sol.y,cD)
+    muH, muE, rhoDOC, rhoPhoto, pE, rH, rE, netNH, netNE, eH, eE = makeFuncs(sol.t,sol.y,cD)
     t = sol.t
 
     fig, (ax1,ax2) = plt.subplots(nrows=2, ncols=1)
@@ -182,7 +193,7 @@ if __name__ == "__main__":
 
 
     ax1.set_ylabel(r"mol C /m$^2$")
-    twin1.set_ylabel("E biomass/H iomass")
+    twin1.set_ylabel("E biomass/H biomass")
     ax2.set_ylabel(r"d$^{-1}$")
     twin2.set_ylabel(r"d$^{-1}$")
     ax2.set_xlabel("d")
