@@ -5,6 +5,9 @@ from model import *
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gspec
 plt.rc('text.latex', preamble=r'\usepackage{amsmath}')
+#plt.rcParams['text.usetex']=True
+#plt.rcParams['text.latex.preamble']=r'\makeatletter \newcommand*{\rom}[1]{\expandafter\@slowromancap\romannumeral #1@} \makeatother'
+
 import seaborn as sns
 
 import numpy as np
@@ -25,25 +28,25 @@ from tqdm import tqdm
 ##### Simulation and saving data ############################
 p = sns.color_palette("colorblind")
 info = pd.DataFrame( 
-    data = [["$H$",                  r"mol C$_\text{O}$/m$^2$",     "Organism biomass",         p[0], (1,0)],
-            ["$E$",                  r"mol C$_\text{O}$/m$^2$",     "Organism biomass",         p[2], (1,0)],
-            ["$N$",                  r"mol DIN/mol C$_\text{O}$", "Inorganic pool",           p[4], (1,0)],
-            ["$C$",                  r"mol DIC/mol C$_\text{O}$", "Inorganic pool",           p[3], (1,0)],
-            ["$E/H$",                "molar ratio",   "Symbiont load",            p[1], (1,0)],
+    data = [["$H$",                   "$H$",                       r"mol C$_\text{org}$/m$^2$",     "Organism biomass",         p[0], (1,0)],
+            ["$S$",                   "$S$",                       r"mol C$_\text{org}$/m$^2$",     "Organism biomass",         p[2], (1,0)],
+            ["$N$",                   "$N$",                       r"mol DIN/mol C$_\text{org}$",   "Inorganic pool",           p[4], (1,0)],
+            ["$C$",                   "$C$",                       r"mol DIC/mol C$_\text{org}$",   "Inorganic pool",           p[3], (1,0)],
+            ["$S/H$",                 "$S/H$",                     "molar ratio",                   "Symbiont load",            p[1], (1,0)],
 
-            [r"$\mu_H$",              r"$d^{-1}$",        "Host carbon flux",         p[0], (1,0)],
-            [r"$\mu_E$",              r"$d^{-1}$",        "Endosymbiont carbon flux", p[2], (1,0)],
-            [r"$\rho_{food}$",        r"$d^{-1}$",        "Host carbon flux",         p[7], (1,0)],
-            [r"$\rho_{photo}$",       r"$d^{-1}$",        "Host carbon flux",         p[1], (1,0)],
-            ["$p_E$",                 r"$d^{-1}$",        "Endosymbiont carbon flux", p[2], (2,2)],
-            ["$r_H$",                 r"$d^{-1}$",        "Inorganic carbon flux",    p[0], (2,2)],
-            ["$r_E$",                 r"$d^{-1}$",        "Inorganic carbon flux",    p[2], (2,2)],
-            ["net $N$ uptake by $H$", r"$d^{-1}$",        "Inorganic nutrient flux",  p[0], (1,0)],
-            ["net $N$ uptake by $E$", r"$d^{-1}$",        "Inorganic nutrient flux",  p[2], (1,0)],
-            ["$e_H$",                 "-",                "Net growth efficiency",    p[0], (1,0)],
-            ["$e_E$",                 "-",                "Net growth efficiency",    p[2], (1,0)]],
-    columns = ["tex_name", "unit", "type", "color", "dashes"],
-    index = ["H", "E", "N", "C", "E/H", "muH", "muE", "rhoDOC", "rhoPhoto", "pE", "rH", "rE", "netNH", "netNE", "eH", "eE"]
+            [r"$\mu_H$",              "$H$ GR",                    "1/d",                  "Host carbon flux",         p[0], (1,0)],
+            [r"$\mu_S$",              "$R$ GR",                    "1/d",                  "Endosymbiont carbon flux", p[2], (1,0)],
+            ["$f$",                   "HFR",                       "1/d",                  "Host carbon flux",         p[7], (1,0)],
+            ["$p_H$",                 "PAR",                       "1/d",                  "Host carbon flux",         p[1], (1,0)],
+            ["$p_S$",                 "DIC fication rate",         "1/d",                  "Endosymbiont carbon flux", p[2], (2,2)],
+            ["$r_H$",                 "$H$ resp. rate",            "1/d",                  "Inorganic carbon flux",    p[0], (2,2)],
+            ["$r_S$",                 "$S$ resp. rate",            "1/d",                  "Inorganic carbon flux",    p[2], (2,2)],
+            ["$H$ net DIN upt.",      "$H$ net DIN upt.",          "1/d",                  "Inorganic nutrient flux",  p[0], (1,0)],
+            ["$S$ net DIN upt.",      "$S$ net DIN upt.",          "1/d",                  "Inorganic nutrient flux",  p[2], (1,0)],
+            ["$e_H$",                 "$H$ net growth efficiancy", "-",                             "Net growth efficiency",    p[0], (1,0)],
+            ["$e_S$",                 "$S$ net growth efficiancy", "-",                             "Net growth efficiency",    p[2], (1,0)]],
+    columns = ["tex_symbol", "tex_name", "unit", "type", "color", "dashes"],
+    index = ["H", "S", "N", "C", "S/H", "muH", "muS", "rhoDOC", "rhoPhoto", "pS", "rH", "rS", "netNH", "netNS", "eH", "eS"]
 )
 
 
@@ -72,22 +75,22 @@ def sim_system(y0,t_span,cons=[],t_eval=None):
 
 
 ##### Symbolic function ####################################################
-def check_for_fps(H_limited, E_limited, cD):
+def check_for_fps(H_limited, S_limited, cD):
     """
-    Function uses symbolic computation to find fixed points for a given state (H and/or E under nutrient limitation)
+    Function uses symbolic computation to find fixed points for a given state (H and/or S under nutrient limitation)
 
     Args:
         H_limited (bool): True if H is nutrient limited
-        E_limited (bool): True if E is nutrient limited
+        S_limited (bool): True if S is nutrient limited
         cD (dict or DataFrame): Complete list of parameters for whitch the fixed points should be found
 
     Returns:
         list[tuple]: List of fixed points
     """
 
-    [dH,dE,dN,dC] = endo_symbolic(H_limited,E_limited)
-    f_subbed = [dH.subs(cD),dE.subs(cD),dN.subs(cD),dC.subs(cD)]
-    fps = sp.solve(f_subbed,[H, E, N, C])
+    [dH,dS,dN,dC] = endo_symbolic(H_limited,S_limited)
+    f_subbed = [dH.subs(cD),dS.subs(cD),dN.subs(cD),dC.subs(cD)]
+    fps = sp.solve(f_subbed,[H, S, N, C])
     #print(fixedPoints)
     return fps
 
@@ -103,11 +106,11 @@ def check_symb_stab(yStar, cD):
     True if all eigenvalues have negative real part, False otherwise
     """
     funcs = make_funcs(np.nan,yStar,cD)
-    state= [funcs[-2]<1/(1+cD[s]),  funcs[-1]<1/(1+cD[s])]
+    state= [funcs[-2]<1/(1+cD[eps]),  funcs[-1]<1/(1+cD[eps])]
 
     F = sp.Matrix(endo_symbolic(state[0],state[1])).subs(cD)
-    J = F.jacobian([H,E,N,C])
-    J = J.subs([(H,yStar[0]), (E,yStar[1]), (N,yStar[2]), (C,yStar[3])])
+    J = F.jacobian([H,S,N,C])
+    J = J.subs([(H,yStar[0]), (S,yStar[1]), (N,yStar[2]), (C,yStar[3])])
 
     eig, _ = la.eig(np.array(J.tolist(), dtype=float))
     stab, numDir = True, 0
@@ -121,8 +124,8 @@ def check_symb_stab(yStar, cD):
 
 
 def check_illegal(state,yStar,cD):
-    muH, muE, rhoDOC, rhoPhoto, pE, rH, rE, netNH, netNE, eH, eE = make_funcs(0,yStar,cD)
-    currState = [bool(eH<(1/(cD[s]+1))) , bool(eE<(1/(cD[s]+1)))]
+    muH, muS, rhoDOC, rhoPhoto, pS, rH, rS, netNH, netNS, eH, eS = make_funcs(0,yStar,cD)
+    currState = [bool(eH<(1/(cD[eps]+1))) , bool(eS<(1/(cD[eps]+1)))]
     return currState == state
 
 
@@ -167,11 +170,14 @@ def find_all_fps(cons=[], ignore_H_lim = True):
         return fps #OBS unorded here!
     
     fps = [None]*4
-    E_not_N_lim = _curate_fps(check_for_fps(0,0,cD), [0,0], cD)
-    E_N_lim     = _curate_fps(check_for_fps(0,1,cD), [0,1], cD)
+    S_not_N_lim = _curate_fps(check_for_fps(0,0,cD), [0,0], cD)
+    S_N_lim     = _curate_fps(check_for_fps(0,1,cD), [0,1], cD)
+
+    if len(S_not_N_lim)+len(S_N_lim)>4:
+        raise ValueError("More than 4 feasible fixed points found. Investigate ODE and parametrization!")
 
     i = 0
-    for fp in E_not_N_lim:
+    for fp in S_not_N_lim:
         if fp[1] == 0.0:
             fps[0] = fp
         else:
@@ -179,7 +185,7 @@ def find_all_fps(cons=[], ignore_H_lim = True):
             i += 1
 
     i = 0
-    for fp in E_N_lim:
+    for fp in S_N_lim:
         if fp[1] == 0.0:
             fps[0] = fp
         else:
@@ -202,7 +208,7 @@ def makeSymbBifur(para,span,cons=[],ignore_H_lim=True):
                 if fp != None:
                     stab = check_symb_stab(fp, cD)
                     fixList.append([para] + [p] + list(fp) + [i] + [stab] )
-                    tqdm.write(f"{para}: {p}, H: {round(fp[0],20)}, E: {round(fp[1],20)}, N: {round(fp[2],20)}, C: {round(fp[3],20)}, fp: {i}, stable = {stab}")
+                    tqdm.write(f"{para}: {p}, H: {round(fp[0],20)}, S: {round(fp[1],20)}, N: {round(fp[2],20)}, C: {round(fp[3],20)}, fp: {i}, stable = {stab}")
                     #sys.stdout.flush()
     except KeyboardInterrupt:
         tqdm.write("\n>>>> Interupted by user")
@@ -300,7 +306,7 @@ def numBifur(para,pValues,y0,cons=[]):
         if sol.success and all(val>=0 for val in sol.x):
             stab = checkStab(sol.x, cD)
             fixList.append( np.concatenate([ [p],y0,[stab] ]) )
-            print(f"{para}: {p}, H: {round(sol.x[0],3)}, E: {round(sol.x[1],10)}, N: {round(sol.x[2],10)}, C: {round(sol.x[3],10)}, stable = {stab}")
+            print(f"{para}: {p}, H: {round(sol.x[0],3)}, S: {round(sol.x[1],10)}, N: {round(sol.x[2],10)}, C: {round(sol.x[3],10)}, stable = {stab}")
         y0 = sol.x
     return np.array(fixList)
 
@@ -359,7 +365,7 @@ def make_df(t, y, funcs, save_name = ""):
     Returns:
         DataFrame: Solution given as dataframe
     """
-    columns = info["tex_name"].to_list()
+    columns = info["tex_symbol"].to_list()
 
     data = np.r_[y, [y[1,:]/y[0,:]], funcs ]
     df = pd.DataFrame(np.transpose(data), index=t, columns=columns)
@@ -371,16 +377,16 @@ def make_df(t, y, funcs, save_name = ""):
 
 
 def save_bifur_data(paras=None, cons=[], save_name=""):
-    para_spans = { s: [1,1.4], to: [1,1.25], pmax: [0.01,1.0], uEmax: [0.005,0.09], uHmax: [0.0,0.01], KNE: [0.0001,0.12], KNH: [0.0,0.002], 
-            delC: [0.0,0.7], CI: [0.0,0.15], delN: [0.0,0.5], NI: [0.0,0.002], mH: [0.01,0.05], mE: [0.03,0.2], KCO2: [0.0001,0.06], rho0: [0,0.1],
-            QFood: [0,0.2], QE: [0.01,0.2], QH: [0.01,0.2], b: [0.01, 1], eps: [0,0.1] }
+    para_spans = { eps: [1,1.4], to: [1,1.25], pmax: [0.01,1.0], uSmax: [0.005,0.09], uHmax: [0.0,0.01], KNS: [0.0001,0.12], KNH: [0.0,0.002], 
+            delC: [0.0,0.7], CI: [0.0,0.15], delN: [0.0,0.5], NI: [0.0,0.002], mH: [0.01,0.05], mS: [0.03,0.2], KCO2: [0.0001,0.06], rho0: [0,0.1],
+            QFood: [0,0.2], QS: [0.01,0.2], QH: [0.01,0.2], g: [0.01, 1], iota: [0,0.1] }
     subset = dict( [(p, para_spans[p]) for p in paras]) if paras else para_spans
 
     data = []
     for p, span in subset.items():
         data = data + makeSymbBifur(p, span, cons, ignore_H_lim=True)
     
-    df = pd.DataFrame(data, columns=["para_name", "para_value", "H", "E", "N", "C", "fp_num", "stable"])
+    df = pd.DataFrame(data, columns=["para_name", "para_value", "H", "S", "N", "C", "fp_num", "stable"])
     df_long = df.melt(id_vars=["para_name", "para_value", "fp_num", "stable"], var_name="var_name", value_name="var_value")
 
     if save_name:
@@ -471,7 +477,7 @@ def make_2D_bifur(para1, para2, span1, span2, grid_size = 10, base_cons=[], save
                     else:
                         stab = check_symb_stab(fp, make_cons(cons))
                                                                                 
-                    for value, name in zip(fp, ["H", "E", "N", "C"]):
+                    for value, name in zip(fp, ["H", "S", "N", "C"]):
                         data.append( [p1, p2, value, fp_num, name, stab] )
 
     df = pd.DataFrame(data, columns=[f"${para1.name}$", f"${para2.name}$", "value", "fp_num", "name", "stability"])
@@ -539,7 +545,7 @@ def _saveable_name(para):
 
 
 def plot_aut_bifur(): #still needs work
-    fix_list = make_aut_bifur(para=uEmax,span=[0.0,0.04],cons=[(pmax,0.5), (uEmax,0.035), (mE,0.03), (NI,1e-4)])
+    fix_list = make_aut_bifur(para=uSmax,span=[0.0,0.04],cons=[(pmax,0.5), (uSmax,0.035), (mS,0.03), (NI,1e-4)])
 
     unstable = fix_list[:,-1] == False
     stable = fix_list[:,-1] == True
@@ -567,33 +573,30 @@ def plot_sim(df, var_list, ax=None, yscale="log", ybottom=None, ytop=None):
     Returns:
         matplotlib.axes.Axes: Ax one which the system was plotted.
     """
-    palette = [info.loc[var, "color"] for var in var_list]
-    var_list = [info.loc[var, "tex_name"] for var in var_list]
-    data = df[var_list]
+    palette  = [info.loc[var, "color"] for var in var_list]
+    var_list = [info.loc[var, "tex_symbol"] for var in var_list]
+    data     = df[var_list]
 
     if not ax:
-        sim_fig, ax = plt.subplots()
+        fig, ax = plt.subplots()
 
-    sns.set_theme(context="paper", style="ticks")
-    sns.lineplot(data, palette=palette, ax=ax, dashes=False, legend="brief")   # dashes = [(1,0), (1,1), osv.]
+    sns.lineplot(data, palette=palette, ax=ax, dashes=False, legend="brief", zorder=1)   # dashes = [(1,0), (1,1), osv.]
 
     ax.set_yscale(yscale)
     ax.set_ylim(bottom=ybottom, top=ytop)
-    ctx = sns.plotting_context("paper")
-    ax.tick_params(axis="both",labelsize=ctx["axes.labelsize"])
-    ax.margins(y=0.05)
+    #ax.margins(y=0.05)
 
     return ax
 
 
-def plot_bifur(path, paras, vars = ["H", "E"], save_name = ""):
+def plot_bifur(path, paras, vars = ["H", "S"], save_name = ""):
     """
     Plots bifurcation diagram for one or more variables for specified parameters. If more parameters are given puts plots together in a comparable figure.
     
     Args:
         path (str): Path to csv dataframe (long format) with bifurcation data.
         paras (list[str]): List of which parameters should be plotted.
-        vars (list[str], optional): Which variables fixed points should be displayed in the bifuraction plot. Defualt is H and E
+        vars (list[str], optional): Which variables fixed points should be displayed in the bifuraction plot. Defualt is H and S
         save_name (str, optional): If non-empty saves figure as png in figs/bifur under save_name.
 
     Returns:
@@ -603,87 +606,66 @@ def plot_bifur(path, paras, vars = ["H", "E"], save_name = ""):
         df = pd.read_csv(path)
     else:
         df = path
-
+    
+    ## Creating a color mapping
+    cmap = {}
+    gradient = {"H": "Blues", "S": "Greens", "N":"RdPu", "C":"Greys"}
+    for var in vars:
+        pallette = sns.color_palette(gradient[var], n_colors=4)
+        for fp_num in range(4):
+            cmap[(var, fp_num)] = pallette[fp_num]
+    
     ## Curating df
-    subset = df[df["para_name"].isin([str(p) for p in paras] )]
-    print(str(paras[0]))
-    subset = subset[subset["var_name"].isin(vars)]
+    df["combined_hue"] = list(zip(df["var_name"], df["fp_num"]))
+    subset = df[(df["para_name"].isin([str(p) for p in paras])) & (df["var_name"].isin(vars))]
+
+    subset.loc[:, "fp_num"] = subset["fp_num"].replace({1:0, 3:2})
 
     ## Setting up the plot
     num_col = round(len(paras)**(1/2))
-    sns.set_theme(style="ticks",context="paper")
-    palette = [info.loc[var, "color"] for var in vars]
-    markers = {0: "^", 1: "D", 2: "o", 3: "s"}
-    g = sns.relplot(subset, x="para_value", y="var_value", hue="var_name", col="para_name", col_wrap=num_col, col_order=[str(p) for p in paras],
-                    style="fp_num", palette=palette, markers=markers, dashes=False, kind="line", facet_kws=dict(sharex=False))
+    g = sns.relplot(subset, x="para_value", y="var_value", hue="combined_hue", col="para_name", col_wrap=num_col, col_order=[str(p) for p in paras],
+                    palette=cmap, kind="line", legend="brief", style="fp_num", style_order=[2,0],
+                    size="stable", sizes={True:3, False:1.5}, size_order=[True, False],
+                    facet_kws=dict(sharex=False))
     
+    g.figure.set_size_inches(6, 5)
+    g.figure.tight_layout(rect=[0, 0, 0.80, 1])
 
-    ## Adding labels
+    ## Customizing legends
     legend = g._legend
-    legend.texts[0].set_text("Variables")
-    legend.texts[0].set_fontweight("bold")
-    legend.texts[len(vars)+1].set_text("Fixed point")
-    legend.texts[len(vars)+1].set_fontweight("bold")
+    handles = legend.legend_handles
+    labels = ["State", "Symbiotic", "Dysbiotic", "Stability", "Stable", "Unstable"]
+    legend.remove()
+    new_leg = g.figure.legend(handles=handles[len(vars)*4+1:len(vars)*4+9], labels=labels, loc="center right", frameon=True)
+    new_leg.texts[0].set_fontweight("bold")
+    new_leg.texts[3].set_fontweight("bold")
+    new_leg.texts[0].set_ha("left")
+#
 
-    g.set_titles("")
+    g.set_titles("")        # Set new titles and x labels
     g.set_ylabels(info.loc[vars[0], "unit"])
     for ax, xlabel in zip(g.axes.flat, [p.name for p in paras]):
         ax.set_xlabel(f"${xlabel}$")
 
+    ## Setting subplot names
+    for ax, subname in zip(g.axes.flat, "abcdefghijklmnop"):
+        ax.text(0.02, 0.98, f"({subname})", transform=ax.transAxes, va="top", ha="left", fontweight = "bold")
+
+
     ## Saving 
     if save_name:
-        plt.savefig("figs/bifurs/" + save_name + ".png")
-
+        plt.savefig("figs/bifurs/" + save_name + ".png", dpi=300, bbox_inches="tight")
+        plt.savefig("figs/pdf_figs/" + save_name + ".pdf", bbox_inches="tight")
     return g
 
 
-def _subplot_bifur(data, color, **kws):
-    ax = plt.gca()
-
-    # stable points – filled
-    sns.scatterplot(
-        data=data[data["stable"] == 1],
-        x="para_value",
-        y="var_value",
-        style="fp_num",
-        hue="var_name",
-        legend=False,
-        ax=ax
-    )
-
-
-def plot_bifur2(path, paras, vars = ["H", "E"], save_name = ""):
-    if isinstance(path, str):
-        df = pd.read_csv(path)
-    else:
-        df = path
-
-    ## Curating df
-    subset = df[df["para_name"].isin([str(p) for p in paras] )]
-    print(str(paras[0]))
-    subset = subset[subset["var_name"].isin(vars)]
-
-    ## Setting up the plot
-    num_col = round(len(paras)**(1/2))
-    sns.set_theme(style="ticks",context="paper")
-    palette = [info.loc[var, "color"] for var in vars]
-    markers = {0: "^", 1: "D", 2: "o", 3: "s"}
-
-    g = sns.FacetGrid(subset, hue="var_name", col="para_name", col_wrap=num_col, col_order=[str(p) for p in paras],
-                palette=palette, sharex=False)
-    
-    g.map_dataframe(_subplot_bifur)
-    g.add_legend(title="var_name / fp_num")
-
-
-
-def plot_2D_bifur(path, var, vmax=None, ax=None, save_name="", cbar=False, cmap="plasma"):
+def plot_2D_bifur(path, var, vmax=None, ax=None, save_name="", cbar=False, cmap="plasma", annot=False):
     """
     Plots 2D bifurcation diagram of given dataframe. Dataframe should have been created using make_2D_bifur()-function
     
     Args:
         path (str or pd.DataFrame): Path to load dataframe or actual dataframe
-        var (str): Variable whos value are plotted. Either "H", "E", "N" or "C"
+        var (str): Variable whos value are plotted. Sither "H", "S", "N" or "C"
         vmax (float): Maximum value for color scale. If not specified maximum value of data is used
         ax (plt.axes.Axes): Ax subplot of figure. If not specified creates an new fixure and subplot
         save_name (str): Name that figure should be saved under. If not specified, it is not saved
@@ -699,11 +681,11 @@ def plot_2D_bifur(path, var, vmax=None, ax=None, save_name="", cbar=False, cmap=
         df = path
 
     cols = df.columns
-    df_fp3 = df[(df["name"]==var) & (df["fp_num"]==3)].pivot(index=cols[0], columns=cols[1], values="value")  # non-zero N-lim state
-    df_fp1 = df[(df["name"]==var) & (df["fp_num"]==1)].pivot(index=cols[0], columns=cols[1], values="value")  # non-zero C-lim state
-    df_fp0 = df[(df["name"]==var) & (df["fp_num"]==0) & (df["stability"]==1)].pivot(index=cols[0], columns=cols[1], values="value") # Semi trivial fixedpoint that is stable
+    df_fp3 = df[(df["name"]==var) & (df["fp_num"]==3)].pivot(index=cols[0], columns=cols[1], values="value").astype(float)  # non-zero N-lim state
+    df_fp1 = df[(df["name"]==var) & (df["fp_num"]==1)].pivot(index=cols[0], columns=cols[1], values="value").astype(float)  # non-zero C-lim state
+    df_fp0 = df[(df["name"]==var) & (df["fp_num"]==0) & (df["stability"]==1)].pivot(index=cols[0], columns=cols[1], values="value").astype(float) # Semi trivial fixedpoint that is stable
 
-    if var == "E":
+    if var == "S" and annot:
         annot_df = ( (df_fp3>df_fp1) | (df_fp3.notna() & df_fp1.isna()) ).replace({True:"*", False:""})
         annot_df = annot_df[::-1]
     else:
@@ -714,12 +696,19 @@ def plot_2D_bifur(path, var, vmax=None, ax=None, save_name="", cbar=False, cmap=
         fig, ax = plt.subplots(1,1,figsize=(5.5, 4),constrained_layout=True)
         cbar = True
 
-    sns.heatmap(sub_df.iloc[::-1], linewidth=0.5, vmin=0, vmax=vmax, annot=annot_df, fmt="", cbar_kws={"label": info.loc[var, "unit"]}, cmap=cmap, ax=ax, cbar=cbar)  #cmap="magma", "plasma", "cividis"
+    sns.heatmap(sub_df.iloc[::-1], linewidth=0.5, vmin=0, vmax=vmax, annot=annot_df, fmt="", annot_kws={"color":"white"}, 
+                                    cbar_kws={"label": info.loc[var, "unit"]}, cmap=cmap, ax=ax, cbar=cbar)  #cmap="magma", "plasma", "cividis" all cbf
     ax.axhline(y=5, color="red", ls="--")
-    ax.set_xticks(ax.get_xticks()[::2])
-    ax.set_yticks(ax.get_yticks()[::2])
-    ax.set_xticklabels([f"{x:.2f}" for x in sub_df.columns[::2]], rotation=45)
-    ax.set_yticklabels([f"{x:.2f}" for x in sub_df.index[::-2]])
+    skip = 3
+    xtick_pos = np.arange(0, sub_df.shape[1], skip) + 0.5
+    xtick_lab = [f"{x:.2f}" for x in sub_df.columns[::skip]]
+    ax.set_xticks(xtick_pos)
+    ax.set_xticklabels(xtick_lab, rotation=45)
+
+    ytick_pos = np.arange(sub_df.shape[0] - 1, -1, -skip)
+    ytick_lab = [f"{sub_df.index[-i-1]:.2f}" for i in ytick_pos]
+    ax.set_yticks(ytick_pos+0.5)
+    ax.set_yticklabels(ytick_lab)
 
     if save_name:
         plt.savefig(f"figs/bifurs/2D_bifur_{save_name}.png", dpi=300, bbox_inches="tight")
@@ -773,7 +762,7 @@ def plot_area_of_attraction(plot_vars, l_bounds, u_bounds, grid_size = 10, cons 
     plt.colorbar()
 
    
-    label_list = ["H", "E", "N", "C", "E/H"]
+    label_list = ["H", "S", "N", "C", "S/H"]
     plt.xlabel(label_list[x_ind])
     plt.ylabel(label_list[y_ind])
 
@@ -798,10 +787,10 @@ def plot_aoa(path, plot_vars, grid_size = 30, save_name = "", ax=None):
     #fig.colorbar(im, label="Probalility")
 
 
-    label_list = ["H", "E", "N", "C", "E/H"]
+    label_list = ["H", "S", "N", "C", "S/H"]
 
-    ax.set_xlabel(label_list[x_ind])
-    ax.set_ylabel(label_list[y_ind])
+    ax.set_xlabel(f"$H$ ({info.loc[label_list[x_ind], "unit"]})")
+    ax.set_ylabel(f"$S/H$ ({info.loc[label_list[y_ind], "unit"]})")
 
     if save_name:
         plt.savefig("figs/plotted_sims/" + save_name + ".png")
@@ -810,18 +799,14 @@ def plot_aoa(path, plot_vars, grid_size = 30, save_name = "", ax=None):
 
 
 if __name__ == "__main__":  
+    #df = make_2D_bifur(s, eps, [1, 1.5], [0.0, 0.09], grid_size=15, save_name="s_eps")
+    #plot_2D_bifur("sims/2D_bifur_s_eps.csv", "S")
 
+    print(p[4],p[3])
 
-    #plot_bifur2("sims/bifur_df", [s,uEmax,pmax])
-    #df = make_2D_bifur(s, pmax, [1, 1.5], [0.001, 1], grid_size=15, save_name="test")
-    #plot_2D_bifur(df, "E")
+    #plot_area_of_attraction([0,-1], [1, 0.01], [110, 1], grid_size=10, cons=[(rho0,0.07)]) 
 
-    #plot_2D_bifur(path="sims/2D_bifur_s_uEmax.csv", vmax=37.7, var="E", cmap="viridis", save_name="E_uEmax")
-    #plot_2D_bifur(path="sims/2D_bifur_s_pmax.csv",  vmax=37.7, var="E", cmap="viridis", save_name="E_pmax")
-    #plot_2D_bifur(path="sims/2D_bifur_s_uEmax.csv", vmax = 112.4, var="H"             , save_name="H_uEmax")
-    #plot_2D_bifur(path="sims/2D_bifur_s_pmax.csv",  vmax = 112.4, var="H"             , save_name="H_pmax" )
-    plot_area_of_attraction([0,-1], [1, 0.01], [110, 1], grid_size=10, cons=[(uEmax,0.0325)])     
-
-    #prob_of_states(30, save_name="test")
-    #plot_aoa("sims/aoa_test_raw.txt", [0,-1])
+    #df = pd.read_csv("sims/bifur_df")
+    #plot_bifur("sims/bifur_df", [QFood])
+    
     plt.show()

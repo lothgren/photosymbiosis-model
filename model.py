@@ -2,14 +2,14 @@
 import numpy as np
 import sympy as sp
 
-H, E, N, C = sp.symbols("H E N C", real=True)
-s, to, b, pmax, KCO2, delC, CI, mE, mH, rho0, HCap, delN, NI, KNE, uEmax, KNH, uHmax, QE, QH, QFood, eps = sp.symbols(
-    r"s TO \beta p_{\max} K_{CO_2} \delta_C C_I m_E m_H rho_{Food\,\max} H_{\max} \delta_N N_I K_E u_{E\,\max} K_H u_{H\,\max} Q_E Q_H Q_{food} \epsilon", real=True)
+H, S, N, C = sp.symbols("H S N C", real=True)
+eps, to, g, pmax, KCO2, delC, CI, mS, mH, rho0, HCap, delN, NI, KNS, uSmax, KNH, uHmax, QS, QH, QFood, iota = sp.symbols(
+    r"\epsilon TO \gamma p_{\max} K_C d_C C_I m_S m_H f_{\max} H_{\max} d_N N_I K_S u_{S\,\max} K_H u_{H\,\max} Q_S Q_H Q_{food} \iota", real=True)
 
 
 def make_cons(changes=[]):
-    paraValues = {s: 1, to: 1, b: 0.5, pmax: 0.5, KCO2: 0.02, delC: 0.5, CI: 0.09, mE: 0.03, mH: 0.03, rho0: 0.07, HCap: 120, 
-                  delN: 0.5, NI:0.00009, KNE: 0.02, uEmax : 0.0375, KNH: 0.0002, uHmax : 0.0045, QE: 0.15, QH: 0.15, QFood: 0.15, eps: 0}
+    paraValues = {eps: 1, to: 1, g: 0.5, pmax: 0.5, KCO2: 0.02, delC: 0.5, CI: 0.09, mS: 0.03, mH: 0.03, rho0: 0.07, HCap: 120, 
+                  delN: 0.5, NI:0.00009, KNS: 0.02, uSmax : 0.0375, KNH: 0.0002, uHmax : 0.0045, QS: 0.15, QH: 0.15, QFood: 0.15, iota: 0}
     for change in changes:
         paraValues[change[0]] = change[1]
     return paraValues
@@ -23,80 +23,80 @@ def max_approx(a,b,e=1e-2):
 
 
 def make_funcs(t, y, cD, min_func = np.minimum, max_func = np.maximum):  
-    H, E, N, C = y
-    rhoDOC = max_func(0,cD[rho0]*(1-H/cD[HCap]))   #Maximum inclided to avoid special intitial values to produce un-ecological results
+    H, S, N, C = y
+    rhoDOC = max_func(0,cD[rho0]*(1-H/cD[HCap]))   #Maximum inclided to avoid spScial intitial values to produce un-ecological results
     rhoDON = rhoDOC*cD[QFood]
 
     uH = cD[uHmax] *(N)/( cD[KNH] + N )
-    uE = cD[uEmax] *(N)/( cD[KNE] + N )
+    uS = cD[uSmax] *(N)/( cD[KNS] + N )
 
-    pE = cD[pmax] * C/(cD[KCO2] + C)
-    nE = (uE/pE)/cD[QE]
-    eE  = min_func(1/(cD[s]+1), nE)
+    pS = cD[pmax] * C/(cD[KCO2] + C)
+    nS = (uS/pS)/cD[QS]
+    eS  = min_func(1/(cD[eps]+1), nS)
 
-    rhoPhoto = (1-(1+cD[s])*eE)*pE*E/H
+    rhoPhoto = (1-(1+cD[eps])*eS)*pS*S/H
     nH = ( (rhoDON + uH)/(rhoDOC+rhoPhoto) )/cD[QH]
-    eH  = min_func(1/(cD[s]+1), nH)
+    eH  = min_func(1/(cD[eps]+1), nH)
 
-    rH = cD[b]* ( cD[s]*eH*(rhoDOC + rhoPhoto) + cD[mH]*cD[to] )    #
-    rE = cD[b]* ( cD[s]*eE*pE + cD[mE]*cD[to] )                     # Total respired CO2 from H and E
+    rH = cD[g]* ( cD[eps]*eH*(rhoDOC + rhoPhoto) + cD[mH]*cD[to] )    #
+    rS = cD[g]* ( cD[eps]*eS*pS + cD[mS]*cD[to] )                     # Total respired CO2 from H and S
 
     lH = (1-eH/nH)*(rhoDON + uH)      #
-    lE = (1-eE/nE)*uE                 # Nutrients leaking in from H and E
+    lS = (1-eS/nS)*uS                 # Nutrients leaking in from H and S
 
     netNH = -lH + uH
-    netNE = - (lE - uE)*E/H
+    netNS = - (lS - uS)*S/H
 
     muH = eH*(rhoDOC + rhoPhoto)
-    muE = eE*pE
+    muS = eS*pS
 
-    return muH, muE, rhoDOC, rhoPhoto, pE, rH, rE, netNH, netNE, eH, eE
+    return muH, muS, rhoDOC, rhoPhoto, pS, rH, rS, netNH, netNS, eH, eS
     
 
 def endo(t, y, cD, min_func = np.minimum, max_func = np.maximum):
-    H, E, N, C = y
-    muH, muE, rhoDOC, rhoPhoto, pE, rH, rE, netNH, netNE, eH, eE  = make_funcs(t,y,cD,min_func,max_func)
+    H, S, N, C = y
+    muH, muS, rhoDOC, rhoPhoto, pS, rH, rS, netNH, netNS, eH, eS  = make_funcs(t,y,cD,min_func,max_func)
 
     dH = (muH-cD[mH]*cD[to])*H
-    dE = (muE-cD[mE]*cD[to] - cD[eps])*E
+    dS = (muS-cD[mS]*cD[to] - cD[iota])*S
 
-    dN = cD[mH]*cD[to]*cD[QH] + cD[mE]*cD[to]*cD[QE]*E/H + cD[delN]*(cD[NI]-N) - netNH - netNE - (muH-cD[mH])*N
-    dC  = rH + rE*E/H - pE*E/H + cD[delC]*(cD[CI]-C) - (muH-cD[mH])*C
+    dN = cD[mH]*cD[to]*cD[QH] + cD[mS]*cD[to]*cD[QS]*S/H + cD[delN]*(cD[NI]-N) - netNH - netNS - (muH-cD[mH])*N
+    dC  = rH + rS*S/H - pS*S/H + cD[delC]*(cD[CI]-C) - (muH-cD[mH])*C
 
-    return [dH,dE,dN,dC]
+    return [dH,dS,dN,dC]
 
 
-def endo_symbolic(nLimH = False, nLimE = True):
+def endo_symbolic(nLimH = False, nLimS = True):
     rhoDOC = rho0*(1-H/HCap)
     rhoDON = rhoDOC*QFood
 
     uH = uHmax *(N)/( KNH + N )
-    uE = uEmax *(N)/( KNE + N )
+    uS = uSmax *(N)/( KNS + N )
 
-    pE = pmax * C/(KCO2 + C)
-    nE = (uE/pE)/QE
-    eE = nE if nLimE else 1/(1+s)
+    pS = pmax * C/(KCO2 + C)
+    nS = (uS/pS)/QS
+    eS = nS if nLimS else 1/(1+eps)
 
-    rhoPhoto = (1-(1+s)*eE)*pE*E/H
+    rhoPhoto = (1-(1+eps)*eS)*pS*S/H
     nH = ( (rhoDON + uH)/(rhoDOC+rhoPhoto) )/QH
-    eH = nH if nLimH else 1/(1+s)                     # sp.Min(1/(s+1), nH)
+    eH = nH if nLimH else 1/(1+eps)                     # sp.Min(1/(s+1), nH)
 
-    rH = b* ( s*eH*(rhoDOC + rhoPhoto) + mH*to )
-    rE = b* ( s*eE*pE + mE*to )
+    rH = g* ( eps*eH*(rhoDOC + rhoPhoto) + mH*to )
+    rS = g* ( eps*eS*pS + mS*to )
 
 
     netH = (1-eH/nH)*(rhoDON + uH) - uH
-    netE = eE/nE*uE                                   # uE if nLimE else eE*QE*pE
+    netS = eS/nS*uS                                   # uS if nLimS else eS*QS*pS
 
     muH = eH*(rhoDOC + rhoPhoto)
-    muE = eE*pE
+    muS = eS*pS
 
     dH = (muH-mH*to)*H
-    dE = (muE-mE*to-eps)*E
-    dN = mH*to*QH + mE*to*QE*E/H + netH - netE*E/H + delN*(NI-N) - (muH-mH*to)*N
-    dC  = rH + rE*E/H - pE*E/H + delC*(CI-C) - (muH-mH*to)*C
+    dS = (muS-mS*to-iota)*S
+    dN = mH*to*QH + mS*to*QS*S/H + netH - netS*S/H + delN*(NI-N) - (muH-mH*to)*N
+    dC  = rH + rS*S/H - pS*S/H + delC*(CI-C) - (muH-mH*to)*C
 
-    return [dH,dE,dN,dC]
+    return [dH,dS,dN,dC]
 
 
 def symb_death(t,y,cD):
@@ -116,23 +116,23 @@ if __name__ == "__main__":
 
     
     def _plot_lim_fac(t, y, cD):
-        H, E,  N, C = y
-        muH, muE, rhoDOC, rhoPhoto, pE, rH, rE, netNH, netNE, eH, eE  = make_funcs(t,y,cD)
+        H, S,  N, C = y
+        muH, muS, rhoDOC, rhoPhoto, pS, rH, rS, netNH, netNS, eH, eS  = make_funcs(t,y,cD)
         fig, (ax1,ax2,ax3) = plt.subplots(nrows=3, ncols=1)
 
         ax1.plot(t,N,"C0", label = "$N$")
         twin1 = ax1.twinx()
         twin1.plot(t,C,"k--",label="C")
 
-        #ax2.plot(t,uE,"g--", label=r"$u_E$")
-        ax2.plot(t,netNE,"g", label=r"$(u_E-l_E)\frac{E}{H}$")
+        #ax2.plot(t,uS,"g--", label=r"$u_S$")
+        ax2.plot(t,netNS,"g", label=r"$(u_S-l_S)\frac{S}{H}$")
         ax2.plot(t, netNH,"b", label=r"$u_H-l_H$")
-        ax2.plot(t,0*E+(cD[mH]*cD[QH]+cD[mE]*cD[QE]*E/H),"b--", label=r"$m_HQ_H+m_EQ_E\frac{E}{H}$")
+        ax2.plot(t,0*S+(cD[mH]*cD[QH]+cD[mS]*cD[QS]*S/H),"b--", label=r"$m_HQ_H+m_SQ_S\frac{S}{H}$")
         ax2.plot(t,cD[delN]*(cD[NI]-N), "r--", label=r"$\delta_N (N_I-N)$")
     
         ax3.plot(t, rH,"b", label=r"$r_{H}$")
-        ax3.plot(t, rE*E/H,"b--", label=r"$r_{E}\frac{E}{H}$")
-        ax3.plot(t, pE*E/H,"g--", label=r"$p_{E}\frac{E}{H}$")
+        ax3.plot(t, rS*S/H,"b--", label=r"$r_{S}\frac{S}{H}$")
+        ax3.plot(t, pS*S/H,"g--", label=r"$p_{S}\frac{S}{H}$")
         ax3.plot(t, cD[delC]*(cD[CI]-C),"k--", label=r"$\delta_C (C_I-C)$")
 
         ax1.legend(loc="upper right")
@@ -148,9 +148,9 @@ if __name__ == "__main__":
 
         plt.figure()
         plt.plot(t,eH,"C0")
-        plt.plot(t,eE,"C2")
+        plt.plot(t,eS,"C2")
     
-    y0 = [30, 30*0.4, 1e-06, 1e-05]
+    y0 = [5, 0.001, 1e-06, 1e-05]
     tEnd = 300
     cD = make_cons([])
 
@@ -158,28 +158,28 @@ if __name__ == "__main__":
     print(sol)
 
     ### Plotting 
-    H, E, N, C = sol.y
-    muH, muE, rhoDOC, rhoPhoto, pE, rH, rE, netNH, netNE, eH, eE = make_funcs(sol.t,sol.y,cD)
+    H, S, N, C = sol.y
+    muH, muS, rhoDOC, rhoPhoto, pS, rH, rS, netNH, netNS, eH, eS = make_funcs(sol.t,sol.y,cD)
     t = sol.t
 
     fig, (ax1,ax2) = plt.subplots(nrows=2, ncols=1)
     
     if y0[1]!=0:
-        ax1.semilogy(t,E,"C2",label="E")
+        ax1.semilogy(t,S,"C2",label="S")
     ax1.semilogy(t,H,"C0",label="H")
     twin1 = ax1.twinx()
-    twin1.plot(t,E/H,"gold", label = "$E/H$")
+    twin1.plot(t,S/H,"gold", label = "$S/H$")
     
     twin2 = ax2.twinx()
-    twin2.plot(t,muE,"g", label=r"$\mu_{E}$")
-    twin2.plot(t,pE,"g--", label=r"$p_{E}$")
+    twin2.plot(t,muS,"g", label=r"$\mu_{S}$")
+    twin2.plot(t,pS,"g--", label=r"$p_{S}$")
     ax2.plot(t,muH,"b", label=r"$\mu_{H}$")
     ax2.plot(t,rhoPhoto,"r--", label=r"$\rho_{photo}$")
     ax2.plot(t,rhoDOC,"k--", label=r"$\rho_{Food}$")
 
 
     ax1.set_ylabel(r"mol C /m$^2$")
-    twin1.set_ylabel("E biomass/H biomass")
+    twin1.set_ylabel("S biomass/H biomass")
     ax2.set_ylabel(r"d$^{-1}$")
     twin2.set_ylabel(r"d$^{-1}$")
     ax2.set_xlabel("d")

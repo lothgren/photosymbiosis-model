@@ -1,38 +1,10 @@
 #This script conatins all 
 
 from analysisTools import *
-import sympy as sp
+import matplotlib.patheffects as pe
+import matplotlib.patches as mpatches
 
 ###### Some simulations
-def mult_events(y0, event_time=[], event=[], base_cons=[], show_start = True): # under construction
-    if not show_start:
-        _, y, _, _ = sim_system(y0, [0, 1000], cons=base_cons)
-        y0 = y[:,-1]
-
-    t, y, funcs = np.empty((1,1)), np.empty((4,1)), np.empty((13,1))
-    t_start = 0
-    for i, t_end in enumerate(event_time):
-        if event[i]:
-            ny0, new_cons = event[i]
-        else:
-            ny0, new_cons = y0, base_cons
-        
-        for i in range(len(y0)):
-            if not isinstance(ny0[i], (int, float)):
-                ny0[i] = y0[i]
-
-        newt, newy, new_funcs, new_cD = sim_system(ny0, [t_start, t_end], cons=base_cons + new_cons)
-        newy[1,newy[1,:]==0] = np.nan
-        
-        t = np.append(t,newt)
-        y = np.c_[y, newy]
-        funcs = np.c_[funcs, new_funcs]
-
-        t_start, y0 = t_end, newy[:,-1]
-    print(y)
-    return t, y, funcs
-
-
 def multEvents(y0,tSpan,cons=[],eventList=[], show_start = True):
     t, y, funcs, cD = sim_system(y0,tSpan,cons)
     y[1,y[1,:]==0] = np.nan
@@ -71,8 +43,8 @@ def _find_crossing(df):
     return ind_list
 
 
-def big_sim(cons=[]):
-    puls_var = s
+def big_sim(figsize, cons=[]):
+    puls_var = eps
     puls_size = 1.5
     puls_duration = 35
 
@@ -98,155 +70,411 @@ def big_sim(cons=[]):
     df0 = make_df(t,y,funcs)
     df1 = make_df(t1,y1,funcs1)
 
-    fig, axs = plt.subplots(4,2, figsize=(9.6,7.2))
-    inner_fs = "small"
-    outer_fs = "medium"
+    sns.set_theme(context="paper", style="ticks")
+    fig, axs = plt.subplots(4,2, figsize=figsize, sharex=True, constrained_layout=True)
+    outer_fs = 10
+    inner_fs = 8
 
-    for col, df in [(0, df0), (1, df1)]:
+    for col, df in enumerate([df0,df1]):
         ax0, ax1, ax2, ax3 = axs[:,col]
         twin0 = ax0.twinx()
         twin1 = ax1.twinx()
 
-        plot_sim(df, ["H", "E"], ax0)
-        plot_sim(df, ["E/H"], twin0, "linear")
+        plot_sim(df, ["H", "S"], ax0)
+        plot_sim(df, ["S/H"], twin0, "linear")
         
         plot_sim(df, ["N"],ax1,  "linear", ybottom=0-1e-3)
         plot_sim(df, ["C"],twin1,"linear", ybottom=0-1e-2)
 
-        plot_sim(df, ["netNH", "netNE"], ax2, "linear")
+        plot_sim(df, ["netNH", "netNS"], ax2, "linear")
         
         plot_sim(df, ["muH", "rhoDOC", "rhoPhoto"],  ax3, "linear")
 
 
         # plotting straight lines
         ax2.axhline(y=0, color = "k", dashes=(2,2))
-        net_N_time = _find_crossing(df["net $N$ uptake by $H$"])
+        net_N_time = _find_crossing(df["$H$ net DIN upt."])
 
         abc = "abcdefgh"
-        titles = ["Population density", "Inorganic pools", "Net DIN uptake", "Host carbon assimialtion and growth"]
+        titles = ["Biomass density", "Inorganic pools", "Net DIN uptake", "Host DOC assimilation"]
         for i, ax in enumerate([ax0, ax1, ax2, ax3]):
-            color = "k"
-            xlim, ylim = ax.get_xlim(), ax.get_ylim()
-            ax.add_artist(plt.Rectangle((xlim[0],ylim[0]), abs(xlim[0])+350, abs(ylim[0])+ylim[1], facecolor="g", alpha=0.1, zorder=-100))
-            if col == 0:
-                ax.add_artist(plt.Rectangle((350+puls_duration,ylim[0]), abs(xlim[1])+350+puls_duration, abs(ylim[0])+ylim[1], facecolor="g", alpha=0.1, zorder=-100))
+            xlim = ax.get_xlim()
+            ax.autoscale(enable=False, axis="x")
+            ax.axvspan(xlim[0], net_N_time[0], facecolor=p[0], alpha=0.15, zorder=-100)
+            ax.axvspan(net_N_time[0], 350,     facecolor=p[3], alpha=0.15, zorder=-100)
+            ax.axvspan(350, 350+puls_duration, facecolor=p[4], alpha=0.50, zorder=-100)
+            if col==0:
+                ax.axvspan(350+puls_duration, xlim[1], facecolor=p[2], alpha=0.15, zorder=-100)
             else:
-                ax.add_artist(plt.Rectangle((350+puls_duration,ylim[0]), abs(xlim[1])+350+puls_duration, abs(ylim[0])+ylim[1], facecolor="r", alpha=0.1, zorder=-100))
-            ax.axvspan(350, 350+puls_duration, facecolor="r", alpha=0.3, zorder=-100)
-
+                ax.axvspan(350+puls_duration, xlim[1], facecolor=p[7], alpha=0.15, zorder=-100)
+           
             ax.set_title(titles[i], fontsize = outer_fs)
-            ax.text(0.02, 0.95, f"({abc[col+2*i]})", transform=ax.transAxes, va="top", ha="left", fontweight = "bold")  # <--- here I added the labeling for now...
+            ax.text(0.02, 0.95, f"({abc[col+2*i]})", transform=ax.transAxes, va="top", ha="left", fontweight = "bold", fontsize=inner_fs)  # <--- here I added the labeling for now...
 
             ax.axvline(x=net_N_time[0], color="k",dashes=(1,1))
         
-        ax1.text(x=350+puls_duration-15, y=0.01, s=r"$\longleftarrow $" + "Heat wave", fontsize = inner_fs)
-        if net_N_time:
-            ax2.text(x=net_N_time[0]+5, y =-0.004, s=r"$\leftarrow$ Switch in H's N-uptake", fontsize = inner_fs)
+        #ax1.text(x=350+puls_duration-15, y=0.01, s=r"$\longleftarrow $" + "Heat wave", fontsize = inner_fs)
+        #if net_N_time:
+        #    ax2.text(x=net_N_time[0]+5, y =-0.004, s=r"$\leftarrow$ Switch in H's N-uptake", fontsize = inner_fs)
 
-        # Setting ylabels
+        ## Setting ylabels and xlabels
         if col == 0:
-            ax0.set_ylabel(r"mol C$_\text{O}$/m$^2$", fontsize=outer_fs)
-            ax1.set_ylabel(r"mol DIN/mol C$_\text{O}$", fontsize=outer_fs)
-            ax2.set_ylabel("days$^{-1}$")
-            ax3.set_ylabel("days$^{-1}$")
-            #twin0.set_yticklabels([])
-            #twin1.set_yticklabels([])
+            for ax, name in zip([ax0,ax1,ax2,ax3], ["H", "N", "netNH", "muH"]):
+                ax.set_ylabel(info.loc[name, "unit"], fontsize=outer_fs)
+            twin0.tick_params(axis="y", which="both", right=False, labelright=False)
+            twin1.tick_params(axis="y", which="both", right=False, labelright=False)
+
+            h0, l0 = ax0.get_legend_handles_labels()         # Positioning and merging legends
+            twin0_h, twin0_l = twin0.get_legend_handles_labels()
+            ax0.legend(h0+twin0_h, l0+twin0_l, loc="lower center", fontsize = inner_fs, ncols=3)
+
+            h1, l1 = ax1.get_legend_handles_labels()       
+            twin1_h, twin1_l = twin1.get_legend_handles_labels()
+            ax1.legend(h1+twin1_h, l1+twin1_l, loc="upper right", fontsize = inner_fs, ncols=1)
+
+            ax2.legend(  loc="lower right",  fontsize = inner_fs)
+            ax3.legend(  loc="center right", fontsize = inner_fs)
         else:
-            #ax0.set_yticklabels([])
-            #ax1.set_yticklabels([])
-            #ax2.set_yticklabels([])
-            #ax3.set_yticklabels([])
-            twin0.set_ylabel(r"mol C$_\text{O}$/mol C$_\text{O}$", fontsize=outer_fs)
-            twin1.set_ylabel(r"mol DIC/mol C$_\text{O}$", fontsize=outer_fs)
+            for ax in [ax0, ax1, ax2, ax3]:
+                ax.tick_params(axis="y", which="both", left=False, labelleft=False)
+                ax.get_legend().remove()
+            twin0.set_ylabel(info.loc["S/H", "unit"], fontsize=outer_fs)
+            twin1.set_ylabel(info.loc["C", "unit"],   fontsize=outer_fs)
+        
+        twin0.get_legend().remove()
+        twin1.get_legend().remove()
 
-        # Positioning legends
-        legend_fs = "x-small"
-        ax0.legend(  loc = "lower right", fontsize = legend_fs)
-        twin0.legend(loc = "upper right", fontsize = legend_fs)
-        ax1.legend(  loc="center right",   fontsize = legend_fs)
-        twin1.legend(loc = "upper right", fontsize = legend_fs)
-        ax2.legend(  loc="lower right",   fontsize = legend_fs)
-        ax3.legend(  loc="lower right",   fontsize = legend_fs)
+        for ax in [ax0,ax1,ax2]:
+            ax.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
+        fig.align_ylabels(axs[:,col])
 
-    # Rescaling col 2
+    ## Rescaling col 2
     all_axs = fig.axes
-    #print(all_axs)
     for i in range(4):
         all_axs[1+2*i].set_ylim(all_axs[2*i].get_ylim())
     for i in range(2):
         all_axs[10+i].set_ylim(all_axs[8+i].get_ylim())
 
+    ## Titles and x-labels
+    all_axs[0].text(0.5, 1.5, "Low nutrient availability",  transform=all_axs[0].transAxes, va="top", ha="center", fontweight = "bold", fontsize=outer_fs)
+    all_axs[1].text(0.5, 1.5, "High nutrient availability", transform=all_axs[1].transAxes, va="top", ha="center", fontweight = "bold", fontsize=outer_fs)
+    all_axs[6].set_xlabel("days", fontsize=outer_fs)
+    all_axs[7].set_xlabel("days", fontsize=outer_fs)
 
-    #Titles and x-labels
-
-    all_axs[0].text(0.5, 1.5, "Standard environmental nutrients, " + r"N$_{\boldsymbol{\text{I}}}$ = 90$\cdot$10$^{\boldsymbol{-6}}$", transform=all_axs[0].transAxes, va="top", ha="center", fontweight = "bold")
-    all_axs[1].text(0.5, 1.5, "Heightened environmental nutrients, " + r"N$_{\boldsymbol{\text{I}}}$ = 450$\cdot$10$^{\boldsymbol{-6}}$",   transform=all_axs[1].transAxes, va="top", ha="center", fontweight = "bold")
-    all_axs[6].set_xlabel("days")
-    all_axs[7].set_xlabel("days")
-
-    plt.tight_layout()
-    #plt.show()
-
-
-###### bifurcation diagram
-def plotBifur(para,bList,ax=None, save=False, EtoH = False):      ### Already looking good but we can make it prettier with sns
-    if ax == None:
-        fig, ax = plt.subplots(1,1)
-
-    mList = ["^", "d", "o", "s"] + ["x"]*10
-    mfcList = ["none", None]
-
-    ms, alpha = 9.0, 0.7
-
-    for i in range(max(bList[:,-2])+1):
-        for j in range(2):
-            m, mfc = mList[i], mfcList[j]
-            rowInd = (bList[:,-1]==j) & (bList[:,-2]==i)
-            if not EtoH:
-                ax.plot(bList[rowInd,1],bList[rowInd,3], color = "C2", marker = m, mfc = mfc, ms= ms, alpha=alpha, ls="-")
-                ax.plot(bList[rowInd,1],bList[rowInd,2], color = "C0", marker = m, mfc = mfc, ms= ms, alpha=alpha, ls="-")
-            else:
-                ax.plot(bList[rowInd,1],bList[rowInd,3]/bList[rowInd,2], color = "C1", marker = m, mfc = mfc, ms= ms, alpha=alpha, ls="")
-
-    #ax.legend()
-    ax.set_xlabel(f"${para.name}$")
-    ylabel = "$E^*/H^*$ (molar ratio)" if EtoH else r"$H^*,\,E^*$ mol C/m$^2$"
-    ax.set_ylabel(ylabel)
-    if save:
-        saveName = para.name.replace("\\","")
-        plt.savefig("figs/bifurs/bifur_" + saveName + ".png")
+    ## Making background color legend
+    infect    = mpatches.Patch(color=p[0], alpha=0.15, label="Infection")
+    switch    = mpatches.Patch(color=p[4], alpha=0.15, label="Switch in N-comp.")
+    heat_wave = mpatches.Patch(color=p[3], alpha=0.30, label="Heat wave")
+    go_back   = mpatches.Patch(color=p[2], alpha=0.15, label="Return to symbiotic state")
+    go_away   = mpatches.Patch(color=p[7], alpha=0.15, label="Switch to dysbiotic state")
+    handles = [infect, switch, heat_wave, go_back, go_away]
+    fig.legend(handles=handles, ncol=3, loc="outside lower center", frameon=False,
+                        borderaxespad=0.0, title="Phase", fontsize=inner_fs, title_fontproperties={'weight': 'bold', "size":inner_fs},
+                        handlelength=0.7, handleheight=0.7, columnspacing=1.5, handletextpad=0.6)
 
 
-def runCollection(pList,save=False,preView=True,cons=[]):
-    bifurList = { s: [1,2], to: [1,1.6], pmax: [0.01,1.0], uEmax: [0.005,0.07], uHmax: [0.0,0.01], KNE: [0.0001,0.12], KNH: [0.0,0.01], 
-                 delC: [0.0,0.7], CI: [0.0,0.15], delN: [0.0,0.5], NI: [0.0,0.004], mH: [0.01,0.05], mE: [0.03,0.2], KCO2: [0.0001,0.06], rho0: [0,0.1],
-                 QFood: [0,0.2], QE: [0.01,0.2], QH: [0.01,0.2], b: [0.01, 1], eps: [0,0.1] }
-    fig, axs = plt.subplots(len(pList), len(pList[0]))
+def suppl_estab():
+    t,y,funcs,cD = multEvents([5,0.001,0.019,0.15], [0,300], cons=[], show_start=True, eventList=[])
+    df = make_df(t,y,funcs)
 
-    for i in range(len(pList)):
-        for j in range(len(pList[i])):
-            para, span = pList[i][j], bifurList[pList[i][j]]
-            b_list = np.array(makeSymbBifur(para, span, cons,ignore_H_lim=True))
+    fig, axs = plt.subplots(2, 2, figsize=(6,3), constrained_layout=True)
+    sns.set_theme(context="paper", style="ticks")
+    outer_fs = 10
+    inner_fs = 8
 
-            if preView:
-                if np.ndim(np.squeeze(pList)) >= 2:
-                    ax = axs[i,j] 
-                elif np.ndim(np.squeeze(pList)) == 1: 
-                    ax = axs[i+j]
-                else:
-                    ax = axs
-                plotBifur(para,b_list,ax=ax,save=False)
+
+    plot_sim(df, ["H", "S"], axs[0,0])
+    twin00 = axs[0,0].twinx()
+    plot_sim(df, ["S/H"], twin00, "linear", ytop=0.8)
+    
+    twin10 = axs[1,0].twinx()
+    plot_sim(df, ["N"], axs[1,0], "linear", ybottom=0-1e-3)
+    plot_sim(df, ["C"], twin10,   "linear", ybottom=0-1e-2)
+
+    plot_sim(df, ["netNH", "netNS"], axs[0,1], "linear")
+    plot_sim(df, ["muH", "rhoDOC", "rhoPhoto"],  axs[1,1], "linear")
+
+    # Straight lines
+    axs[0,1].axhline(y=0, color = "k", dashes=(2,2))
+
+    # Legends
+    h0, l0 = axs[0,0].get_legend_handles_labels()        
+    twin0_h, twin0_l = twin00.get_legend_handles_labels()
+    axs[0,0].legend(h0+twin0_h, l0+twin0_l, loc="lower right", fontsize = inner_fs, ncols=1)
+    twin00.legend().remove()
+
+    h1, l1 = axs[1,0].get_legend_handles_labels()        
+    twin1_h, twin1_l = twin10.get_legend_handles_labels()
+    axs[1,0].legend(h1+twin1_h, l1+twin1_l, loc="center right", fontsize = inner_fs, ncols=1)
+    twin10.legend().remove()
+
+    axs[0,1].legend(loc="center right",  fontsize = inner_fs)
+    axs[1,1].legend(loc="lower right",  fontsize = inner_fs)
+    
+    # Tiks labels
+    axs[0,0].set_ylabel(info.loc["H", "unit"], fontsize=outer_fs)
+    twin00.set_ylabel(info.loc["S/H", "unit"], fontsize=outer_fs)
+    axs[1,0].set_ylabel(info.loc["N", "unit"], fontsize=outer_fs)
+    twin10.set_ylabel(info.loc["C", "unit"],   fontsize=outer_fs)
+    axs[0,1].set_ylabel(info.loc["netNH", "unit"], fontsize=outer_fs)
+    axs[1,1].set_ylabel(info.loc["muH", "unit"],   fontsize=outer_fs)
+
+    axs[0,0].tick_params(axis="x", which="both", bottom=False, labelbottom=False)
+    axs[0,1].tick_params(axis="x", which="both", bottom=False, labelbottom=False)
+    axs[1,0].set_xlabel("days", fontsize=outer_fs)
+    axs[1,1].set_xlabel("days", fontsize=outer_fs)
+
+    ctx = sns.plotting_context("paper")
+    twin00.tick_params(axis="both", labelsize=ctx["axes.labelsize"])
+    twin10.tick_params(axis="both", labelsize=ctx["axes.labelsize"])
+
+
+
+
+    # Sublabels
+    for ax, sub_label in zip(axs.ravel(), "abcd"):
+        ax.text(0.02, 0.95, f"({sub_label})", transform=ax.transAxes, va="top", ha="left", fontweight = "bold", fontsize=inner_fs)
+
+        #xlim = ax.get_xlim()
+        #ax.autoscale(enable=False, axis="x")
+        #ax.axvspan(xlim[0], xlim[1], facecolor=p[7], alpha=0.15, zorder=-100)
+
+
+
+def big_aoa_plot(figsize):
+    fig, axs = plt.subplots(3,3, figsize=figsize, sharex=True, sharey=True, constrained_layout=True)
+
+    for i, NI_val in enumerate([9e-05, 0.00027, 0.00045]):
+        for j, eps_val in enumerate([1, 1.1, 1.2]):
+            im = plot_aoa(f"sims/aoa_N_I={NI_val}_s={eps_val}_raw.txt", [0,-1], ax=axs[i,j])
+            fps = find_all_fps([(NI,NI_val), (eps,eps_val)])
+            if fps[3]:
+                line, = axs[i,j].plot(fps[3][0],fps[3][1]/fps[3][0], marker="x", ms=5, color="white", markeredgewidth=1.5, zorder=10)
+                line.set_path_effects([pe.Stroke(linewidth=4, foreground="black"), pe.Normal()])
+            if i == 0: axs[i,j].text(0.5, 1.1, r"$\epsilon$ "+f"= {eps_val}", rotation=0, ha="center", va="top", transform=axs[i, j].transAxes)
+            if j == 2: axs[i,j].text(1, 0.5, f"$N_I$ = {NI_val}", rotation=-90, ha="left", va="center", transform=axs[i, j].transAxes)
+            if i in [0,1]: axs[i,j].xaxis.set_visible(False)
+            if j in [1,2]: axs[i,j].yaxis.set_visible(False)
+            if i == 2 and j != 1: axs[i,j].set_xlabel("")
+            if i != 1 and j == 0: axs[i,j].set_ylabel("")
+    cbar = fig.colorbar(im, ax=axs, label="Probalility", orientation="vertical", fraction=0.05, pad=0.04)
+
+
+def suppl_aoa_plot(figsize):
+    fig, axs = plt.subplots(1,3, figsize=figsize, sharex=True, sharey=True, constrained_layout=True)
+    fs = 10
+
+    for j, eps_val in enumerate([1,1.1,1.2]):
+        im = plot_aoa(f"sims/aoa_uEmax=0.0325_s={eps_val}_raw.txt", [0,-1], ax=axs[j])
+
+        fps = find_all_fps([(uSmax,0.0325), (eps,eps_val)])
+        if fps[3]:
+            line, = axs[j].plot(fps[3][0],fps[3][1]/fps[3][0], marker="x", ms=5, color="white", markeredgewidth=1.5, zorder=10)
+            line.set_path_effects([pe.Stroke(linewidth=4, foreground="black"), pe.Normal()])
+
+        axs[j].text(0.5, 1.14, r"$\epsilon$ = "+ f"{eps_val}", rotation=0, ha="center", va="top", transform=axs[j].transAxes, fontsize=fs)
+        if j in [1,2]: axs[j].yaxis.set_visible(False)
+        if j != 1: axs[j].set_xlabel("")
+    
+    axs[j].text(1, 0.5, r"$u_{S,\max}=0.0325$", rotation=-90, ha="left", va="center", transform=axs[j].transAxes, fontsize=fs)
+    cbar = fig.colorbar(im, ax=axs, label="Probalility", orientation="vertical", fraction=0.05, pad=0.04, aspect=10)
+
+
+def big_2D_plot(figsize):
+    fig = plt.figure(figsize=figsize, constrained_layout=True)
+    gs = gspec.GridSpec(nrows=2, ncols=3, width_ratios=[1, 1, 0.05], wspace=0.05, hspace=0.05, figure=fig)
+    axs = np.empty((2,2), dtype=object)
+    fs = 10
+
+    for i, cmap, var in zip([0, 1], ["plasma", "viridis"], ["H", "S"]):
+        axs[i,0] = fig.add_subplot(gs[i,0])
+        axs[i,1] = fig.add_subplot(gs[i,1])
+        cax = fig.add_subplot(gs[i,2])
+
+        df = pd.concat([pd.read_csv("sims/2D_bifur_s_uEmax.csv"), pd.read_csv("sims/2D_bifur_s_pmax.csv")])   # Finding max value to scale colorbar
+        vmax = df.loc[(df["name"] == var) & (df["fp_num"] == 3), "value"].max()                                                       # 
+        hm0 = plot_2D_bifur(path="sims/2D_bifur_s_uEmax.csv", var=var, ax=axs[i,0], vmax=vmax, cmap=cmap)
+        hm1 = plot_2D_bifur(path="sims/2D_bifur_s_pmax.csv",  var=var, ax=axs[i,1], vmax=vmax, cmap=cmap)
+        cbar = fig.colorbar(hm1.collections[0], cax=cax)
+        cbar.set_label(f"{var} {info.loc[var, "unit"]}") 
+
+    axs[0,0].set_xlabel("")
+    axs[0,1].set_xlabel("")
+    
+    axs[0,0].set_ylabel(r"$\epsilon$")
+    axs[1,0].set_ylabel(r"$\epsilon$")
+    axs[0,1].set_ylabel("")
+    axs[1,1].set_ylabel("")
+
+    for ax, subname in zip(axs.ravel(), "abcd"):
+        ax.text(0.02, 1, f"({subname})", transform=ax.transAxes, va="top", ha="left", fontweight = "bold")
+    #fig.tight_layout()
+
+
+## Plots for beamer
+def _labels_legend(fig, axs, fs):
+    ax0, ax1, twin0, twin1 = axs
+
+    ## Fixing legends
+    ax0.get_legend().remove()
+    twin0.get_legend().remove()
+    h, l = ax0.get_legend_handles_labels()         # Positioning and merging legends
+    twin_h, twin_l = twin0.get_legend_handles_labels()
+    legend = twin0.legend(h+twin_h, l+twin_l, ncols=3, loc="lower right")
+
+    ax1.get_legend().remove()
+    twin1.get_legend().remove()
+    h, l = ax1.get_legend_handles_labels()         # Positioning and merging legends
+    twin_h, twin_l = twin1.get_legend_handles_labels()
+    legend = twin1.legend(h+twin_h, l+twin_l, ncols=1, loc="lower right")
+    
+    ## x and y labels
+    ax0.set_ylabel(info.loc["H", "unit"],     fontsize=fs)
+    ax1.set_ylabel(info.loc["netNH", "unit"], fontsize=fs)
+    twin0.set_ylabel(info.loc["S/H", "unit"], fontsize=fs)
+    twin1.set_ylabel(info.loc["rhoPhoto", "unit"], fontsize=fs)
+    ax1.set_xlabel("days", fontsize=fs)
+
+    fig.align_ylabels(axs)
+    fig.align_ylabels([twin1,twin0])
+
+
+def beamer_sim():
+    # Establishment under normal circumstances + s-puls
+    t,y,funcs,cD = multEvents([25,0,0.001,0.001], [0,200], cons=[], show_start=False, eventList=[
+        [[None,   0, None, None],             50,       [] ],
+        [[None, 0.1, None, None],            400,       [] ]
+    ])
+
+    df0 = make_df(t,y,funcs)
+
+    sns.set_theme(context="notebook", style="ticks")
+    ctx = sns.plotting_context("notebook") 
+    fig, axs = plt.subplots(2,1, figsize=(6,4), sharex=True, constrained_layout=True)
+    ax0, ax1 = axs
+    twin0 = ax0.twinx()
+    twin1 = ax1.twinx()
+    plot_sim(df0, ["H", "S"], ax0)
+    plot_sim(df0, ["S/H"], twin0, "linear")
+    plot_sim(df0, ["netNH", "netNS"], ax1, "linear")
+    plot_sim(df0, ["rhoPhoto"], twin1, "linear")
+
+    ax0.tick_params(axis="both",labelsize=ctx["axes.labelsize"]) # Fixing label fonts
+    ax1.tick_params(axis="both",labelsize=ctx["axes.labelsize"])
+
+    net_N_time = _find_crossing(df0["$H$ net DIN upt."])
+    titles = ["Biomass density", "Net DIN uptake and allocation rate of photosynthates"]
+    for i, ax in enumerate([ax0, ax1]):
+            xlim, ylim = ax.get_xlim(), ax.get_ylim()
+            background_color = plt.Rectangle((xlim[0],ylim[0]), xlim[1]-xlim[0], ylim[1]-ylim[0], facecolor="g", alpha=0.1, zorder=-100)
+            ax.add_patch(background_color)
+            ax.axvline(x=net_N_time[0], color="k",dashes=(1,1))
+            ax.axvline(x=270, color="k",dashes=(1,1))
+            ax.axhline(y=0,             color="k",dashes=(1,1))
             
-            if save:
-                plotBifur(para,b_list,ax=None,save=True)
-                plt.close()
+            if i==0:
+                ax.text(x=xlim[0]+(-abs(xlim[0])+net_N_time)/2, y=0.8, s="I",   fontsize=14, fontweight="bold", fontname="Times New Roman")
+                ax.text(x=net_N_time+(270-net_N_time[0])/2,     y=0.8, s="II",  fontsize=14, fontweight="bold", fontname="Times New Roman")
+                ax.text(x=270+(xlim[1]-270)/2,                  y=0.8, s="III", fontsize=14, fontweight="bold", fontname="Times New Roman")
 
-    if preView:
-        plt.show()
+            ax.set_title(titles[i])
+
+    _labels_legend(fig,[ax0,ax1,twin0,twin1],ctx["axes.labelsize"])
+
+
+def beamer_sim2(NI_val):
+    puls_duration = 35
+    puls_size     = 1.5
+    # Establishment under normal circumstances + s-puls
+    t,y,funcs,cD = multEvents([100,10,0.001,0.001], [0,200], cons=[(NI,NI_val)], show_start=False, eventList=[
+        [[None, None,   None, None],            100,       [] ],
+        [[None, None, None, None], puls_duration, [(s,puls_size)] ],
+        [[None, None, None, None],           200,       [] ]
+    ])
+
+    df0 = make_df(400+t,y,funcs)
+
+    sns.set_theme(context="notebook", style="ticks")
+    ctx = sns.plotting_context("notebook") 
+
+    fig, axs = plt.subplots(2,1, figsize=(6,4), sharex=True, constrained_layout=True)
+    ax0, ax1 = axs
+    twin0 = ax0.twinx()
+    twin1 = ax1.twinx()
+    plot_sim(df0, ["H", "S"], ax0)
+    plot_sim(df0, ["S/H"], twin0, "linear")
+    plot_sim(df0, ["netNH", "netNS"], ax1, "linear")
+    plot_sim(df0, ["rhoPhoto"], twin1, "linear")
+
+    
+    ax0.tick_params(axis="both",labelsize=ctx["axes.labelsize"])
+    ax1.tick_params(axis="both",labelsize=ctx["axes.labelsize"])
+
+    titles = ["Biomass density", "Net DIN uptake and allocation rate of photosynthates"]
+    for i, ax in enumerate([ax0, ax1]):
+            xlim, ylim = ax.get_xlim(), ax.get_ylim()
+            n_lim     = plt.Rectangle((xlim[0],ylim[0]), 500-xlim[0], ylim[1]-ylim[0], facecolor="g", alpha=0.1, zorder=-100)
+            heat_wave = plt.Rectangle((500,ylim[0]), puls_duration, ylim[1]-ylim[0], facecolor="r", alpha=0.4, zorder=-100)
+            n_lim2     = plt.Rectangle((500+puls_duration, ylim[0]), xlim[1]-500-puls_duration, ylim[1]-ylim[0], facecolor="g", alpha=0.1, zorder=-100)
+            for patch in [n_lim, heat_wave, n_lim2]: ax.add_patch(patch)
+
+            ax.axvline(x=500,               color="k",dashes=(1,1))
+            ax.axvline(x=500+puls_duration, color="k",dashes=(1,1))
+            ax.axhline(y=0,             color="k",dashes=(1,1))
+            ax.set_title(titles[i])
+    ax0.text(x=xlim[0]+(500-xlim[0])/2, y=50, s="IV", fontsize=14, fontweight="bold", fontname="Times New Roman", ha="center")
+    ax0.text(x=500+puls_duration/2,     y=50, s="V",  fontsize=14, fontweight="bold", fontname="Times New Roman", ha="center")
+    ax0.text(x=500+puls_duration + (xlim[1]-500-puls_duration)/2, y=50, s="VI", fontsize=14, fontweight="bold", fontname="Times New Roman", ha="center")
+    _labels_legend(fig, [ax0,ax1,twin0,twin1], ctx["axes.labelsize"])
+
+
+def beamer_heat_wave(NI_val):
+    puls_duration = 40
+    puls_size     = 1.5
+    # Establishment under normal circumstances + s-puls
+    t,y,funcs,cD = multEvents([100,10,0.001,0.001], [0,200], cons=[(NI,NI_val)], show_start=False, eventList=[
+        [[None, None,   None, None],            100,       [] ],
+        [[None, None, None, None], puls_duration, [(s,puls_size)] ],
+        [[None, None, None, None],           200,       [] ]
+    ])
+
+    df0 = make_df(400+t,y,funcs)
+
+    sns.set_theme(context="notebook", style="ticks")
+    ctx = sns.plotting_context("notebook") 
+
+    fig, axs = plt.subplots(2,1, figsize=(6,4), sharex=True, constrained_layout=True)
+    ax0, ax1 = axs
+    twin0 = ax0.twinx()
+    twin1 = ax1.twinx()
+    plot_sim(df0, ["H", "S"], ax0)
+    plot_sim(df0, ["S/H"], twin0, "linear",ytop=0.8)
+    plot_sim(df0, ["netNH", "netNS"], ax1, "linear")
+    plot_sim(df0, ["rhoPhoto"], twin1, "linear")
+
+    
+    ax0.tick_params(axis="both",labelsize=ctx["axes.labelsize"])
+    ax1.tick_params(axis="both",labelsize=ctx["axes.labelsize"])
+
+    titles = ["Biomass density", "Net DIN uptake and allocation rate of photosynthates"]
+    for i, ax in enumerate([ax0, ax1]):
+            xlim, ylim = ax.get_xlim(), ax.get_ylim()
+            n_lim     = plt.Rectangle((xlim[0],ylim[0]), 500-xlim[0], ylim[1]-ylim[0], facecolor="g", alpha=0.1, zorder=-100)
+            heat_wave = plt.Rectangle((500,ylim[0]), puls_duration, ylim[1]-ylim[0], facecolor="r", alpha=0.4, zorder=-100)
+            n_lim2     = plt.Rectangle((500+puls_duration, ylim[0]), xlim[1]-500-puls_duration, ylim[1]-ylim[0], facecolor="r", alpha=0.1, zorder=-100)
+            for patch in [n_lim, heat_wave, n_lim2]: ax.add_patch(patch)
+
+            ax.axvline(x=500,               color="k",dashes=(1,1))
+            ax.axvline(x=500+puls_duration, color="k",dashes=(1,1))
+            ax.axhline(y=0,             color="k",dashes=(1,1))
+            ax.set_title(titles[i])
+    ax0.text(x=xlim[0]+(500-xlim[0])/2, y=50, s="IV", fontsize=14, fontweight="bold", fontname="Times New Roman", ha="center")
+    ax0.text(x=500+puls_duration/2,     y=50, s="V",  fontsize=14, fontweight="bold", fontname="Times New Roman", ha="center")
+    ax0.text(x=500+puls_duration + (xlim[1]-500-puls_duration)/2, y=50, s="VI", fontsize=14, fontweight="bold", fontname="Times New Roman", ha="center")
+    _labels_legend(fig, [ax0,ax1,twin0,twin1], ctx["axes.labelsize"])
 
 
 #### Running stuff ##############################################################
-
 def make_data():
     ## All 1D bifurcations
     #save_bifur_data(save_name="bifur_df")
@@ -255,113 +483,78 @@ def make_data():
     #prob_of_states(n=30000, cons=[])
     #prob_of_states(n=30000, cons=[(NI,0.00027)])
     #prob_of_states(n=30000, cons=[(s,1.2)])
-    #prob_of_states(n=30000, cons=[(uEmax,0.02)])
-    #prob_of_states(n=30000, cons=[(uEmax,0.05)])
+    #prob_of_states(n=30000, cons=[(uSmax,0.02)])
+    #prob_of_states(n=30000, cons=[(uSmax,0.05)])
     #prob_of_states(n=30000, cons=[(NI,0.0009)])
 
     ## 2D bifurcations
-    make_2D_bifur(s,uEmax,[1,1.5],[0.001,0.07], 15, save_name="s_uEmax")
-    make_2D_bifur(s,pmax,[1,1.5],[0.001,1], 15, save_name="s_pmax")
+    #make_2D_bifur(s,uSmax,[1,1.5],[0.001,0.07], 15, save_name="s_uSmax")
+    #make_2D_bifur(s,pmax,[1,1.5],[0.001,1], 15, save_name="s_pmax")
     
-    make_2D_bifur(pmax,uEmax,[0.01,1],[0.001,0.07], 15, save_name="pmax_uEmax")
-    make_2D_bifur(s,NI,[1,1.5],[0.0,0.00175], 15, save_name="s_NI")
-    make_2D_bifur(s,CI,[1,1.5],[0.07,0.15], 15, save_name="s_CI")
+    #make_2D_bifur(pmax,uSmax,[0.01,1],[0.001,0.07], 15, save_name="pmax_uSmax")
+    #make_2D_bifur(s,NI,[1,1.5],[0.0,0.00175], 15, save_name="s_NI")
+    #make_2D_bifur(s,CI,[1,1.5],[0.07,0.15], 15, save_name="s_CI")
 
-
-def big_aoa_plot():
-    fig, axs = plt.subplots(3,3, figsize=(9.6,7.2), sharex=True, sharey=True, constrained_layout=True)
-
-    for i, NI_val in enumerate([9e-05, 0.00027, 0.00045]):
-        for j, s_val in enumerate([1, 1.1, 1.2]):
-            im = plot_aoa(f"sims/aoa_N_I={NI_val}_s={s_val}_raw.txt", [0,-1], ax=axs[i,j])
-            fps = find_all_fps([(NI,NI_val), (s,s_val)])
-            if fps[3]:
-                axs[i,j].plot(fps[3][0],fps[3][1]/fps[3][0],"rx")
-            if i == 0: axs[i,j].text(0.5, 1.07, f"$s$ = {s_val}", rotation=0, ha="center", va="top", transform=axs[i, j].transAxes)
-            if j == 2: axs[i,j].text(1, 0.5, f"$N_I$ = {NI_val}", rotation=-90, ha="left", va="center", transform=axs[i, j].transAxes)
-            if i in [0,1]: axs[i,j].xaxis.set_visible(False)
-            if j in [1,2]: axs[i,j].yaxis.set_visible(False)
-    #fig.tight_layout()
-    cbar = fig.colorbar(im, ax=axs, label="Probalility", orientation="vertical", fraction=0.05, pad=0.04)
-
-
-def suppl_aoa_plot(figsize):
-    fig, axs = plt.subplots(1,3, figsize=figsize, sharex=True, sharey=True, constrained_layout=True)
-
-    for j, s_val in enumerate([1,1.1,1.2]):
-        im = plot_aoa(f"sims/aoa_uEmax=0.0325_s={s_val}_raw.txt", [0,-1], ax=axs[j])
-
-        fps = find_all_fps([(uEmax,0.0325), (s,s_val)])
-        if fps[3]:
-            axs[j].plot(fps[3][0],fps[3][1]/fps[3][0],"rx")
-
-        axs[j].text(0.5, 1.07, f"$s$ = {s_val}", rotation=0, ha="center", va="top", transform=axs[j].transAxes)
-        if j in [1,2]: axs[j].yaxis.set_visible(False)
-    
-    axs[j].text(1, 0.5, r"$u_{E,\max}=0.0325$", rotation=-90, ha="left", va="center", transform=axs[j].transAxes)
-    cbar = fig.colorbar(im, ax=axs, label="Probalility", orientation="vertical", fraction=0.05, pad=0.04)
-
-
-def big_2D_plot():
-    fig = plt.figure(figsize=(9.6,7.2))
-    gs = gspec.GridSpec(nrows=2, ncols=3, width_ratios=[1, 1, 0.05], wspace=0.3, hspace=0.2)
-    axs = np.empty((2,2), dtype=object)
-
-    for i, cmap, var in zip([0, 1], ["plasma", "viridis"], ["H", "E"]):
-        axs[i,0] = fig.add_subplot(gs[i,0])
-        axs[i,1] = fig.add_subplot(gs[i,1])
-        cax = fig.add_subplot(gs[i,2])
-
-        df = pd.concat([pd.read_csv("sims/2D_bifur_s_uEmax.csv"), pd.read_csv("sims/2D_bifur_s_pmax.csv")])   # Finding max value to scale colorbar
-        vmax = df.loc[df["name"] == var, "value"].max()                                                       # 
-        hm0 = plot_2D_bifur(path="sims/2D_bifur_s_uEmax.csv", var=var, ax=axs[i,0], vmax=vmax, cmap=cmap)
-        hm1 = plot_2D_bifur(path="sims/2D_bifur_s_pmax.csv",  var=var, ax=axs[i,1], vmax=vmax, cmap=cmap)
-        cbar = fig.colorbar(hm1.collections[0], cax=cax)
-        cbar.set_label(f"{var} C-mol/m$^2$")
-
-    axs[0,0].set_xlabel("")
-    axs[0,1].set_xlabel("")
-    axs[0,1].set_ylabel("")
-    axs[1,1].set_ylabel("")
-
-    for ax, subname in zip(axs.ravel(), "abcd"):
-        ax.text(0.02, 1, f"({subname})", transform=ax.transAxes, va="top", ha="left", fontweight = "bold")
-    fig.tight_layout()
-
+    #make_2D_bifur(s,rho0,[1,1.5],[0.001,0.1], 15, save_name="s_rhoFood")
+    make_2D_bifur(s,QFood,[1,1.5],[0.01,0.20], 15, save_name="s_QFood")
 
 
 def plot_and_save():
-    figsize = (9.6,7.2)  # common figsize for all plots_
+    figsize = (6,6)  # common figsize for all plots
 
     ## Plot large simulation displaying estab
-    big_sim()
-    plt.savefig("figs/plotted_sims/estab_plus_heat_wave.png", dpi=300, bbox_inches="tight")  # can also save as pdf (optional?). Then dont give dpi arg!
+    #big_sim(figsize=(6,6))
+    #plt.savefig("figs/plotted_sims/estab_plus_heat_wave.png", dpi=300, bbox_inches="tight") 
+    #plt.savefig("figs/pdf_figs/estab_plus_heat_wave.pdf", bbox_inches="tight")
 
-    ## Plot area of attraction
-    #big_aoa_plot()
+    ### Plot area of attraction
+    #big_aoa_plot(figsize=(6,5))
     #plt.savefig("figs/plotted_sims/aoa_collection.png", dpi=300, bbox_inches="tight")
+    #plt.savefig("figs/pdf_figs/aoa_collection.pdf", bbox_inches="tight")
 
 
     ## Plot 2D bifurcations
-    #big_2D_plot()                               
+    #big_2D_plot((6,5))                               
     #plt.savefig("figs/plotted_sims/2D_bifur.png", dpi=300, bbox_inches="tight")
+    #plt.savefig("figs/pdf_figs/2D_bifur.pdf", bbox_inches="tight")
 
     ## Supplementary plots
-    #plot_bifur("sims/bifur_df", [s, rho0, NI, CI ],       save_name="bifur_external")
-    #plot_bifur("sims/bifur_df", [uEmax, KNE, pmax, KCO2], save_name="bifur_symbiont")
-    #plot_bifur("sims/bifur_df", [s])
+    plot_bifur("sims/bifur_df", [eps, rho0, NI, CI ],       save_name="bifur_external")
+    plot_bifur("sims/bifur_df", [uSmax, KNS, pmax, KCO2], save_name="bifur_symbiont")
+    #plot_bifur("sims/bifur_df", [eps])
 
-    suppl_aoa_plot((figsize[0],figsize[1]/3))
-    plt.savefig("figs/plotted_sims/suppl_aoa.png", dpi=300, bbox_inches="tight")
+    #suppl_aoa_plot((6,5/3))
+    #plt.savefig("figs/plotted_sims/suppl_aoa.png", dpi=300, bbox_inches="tight")
+    #plt.savefig("figs/pdf_figs/suppl_aoa.pdf", bbox_inches="tight")
+
+    #suppl_estab()
+    #plt.savefig("figs/plotted_sims/suppl_estab.png", dpi=300, bbox_inches="tight")
+    #plt.savefig("figs/pdf_figs/suppl_estab.pdf", bbox_inches="tight")
 
 
+def plot_slide_pics():
+    beamer_sim()
+    plt.savefig("figs/pdf_figs/beamer_sim_estab.pdf", bbox_inches="tight")
+
+    #beamer_sim2(9e-5)
+    #plt.savefig("figs/pdf_figs/beamer_sim_heat_wave.pdf", bbox_inches="tight")
+
+    #beamer_sim2(45e-5)
+    #plt.savefig("figs/pdf_figs/beamer_sim_heat_wave_eutr.pdf", bbox_inches="tight")
+
+    beamer_heat_wave(9e-5)
+    plt.savefig("figs/pdf_figs/beamer_sim_heat_wave_long.pdf", bbox_inches="tight")
 
 
 if __name__ == "__main__":
-    #runCollection([[CI, delC], [NI, delN]], cons=[(b,1),(pmax,0.25)])
     #make_data()
-    #plot_bifur("sims/bifur_df", [s, uEmax, NI])
-    plot_and_save()
-    #plot_aoa(f"sims/aoa__u_E,max=0.02_N_I=0.0009_raw.txt", [0,-1])
+    #plot_bifur("sims/bifur_df", [s, uSmax, NI])
     
+    #plot_aoa(f"sims/aoa__u_E,max=0.02_N_I=0.0009_raw.txt", [0,-1])
+    #plot_2D_bifur(path="sims/2D_bifur_s_CI.csv", var="S")
+    #plot_2D_bifur(path="sims/2D_bifur_s_rhoFood.csv", var="S", cmap="viridis")
+
+    plot_and_save()
+    #plot_slide_pics()
+
     plt.show()
