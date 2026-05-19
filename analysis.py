@@ -1,4 +1,6 @@
-#This script conatins all 
+#######################################################################################################################################################
+## # In this script the final simulations and graphics for the publication and oral presentations is created using the model and the analysis tools ###
+#######################################################################################################################################################
 
 from analysisTools import *
 import matplotlib.patheffects as pe
@@ -158,13 +160,13 @@ def big_sim(figsize, cons=[]):
     ## Titles and x-labels
     all_axs[0].text(0.5, 1.5, "Low nutrient availability",  transform=all_axs[0].transAxes, va="top", ha="center", fontweight = "bold", fontsize=outer_fs)
     all_axs[1].text(0.5, 1.5, "High nutrient availability", transform=all_axs[1].transAxes, va="top", ha="center", fontweight = "bold", fontsize=outer_fs)
-    all_axs[6].set_xlabel("days", fontsize=outer_fs)
-    all_axs[7].set_xlabel("days", fontsize=outer_fs)
+    all_axs[6].set_xlabel("d", fontsize=outer_fs)
+    all_axs[7].set_xlabel("d", fontsize=outer_fs)
 
     ## Making background color legend
     infect    = mpatches.Patch(color=p[0], alpha=0.15, label="Infection")
-    switch    = mpatches.Patch(color=p[4], alpha=0.15, label="Switch in N-comp.")
-    heat_wave = mpatches.Patch(color=p[3], alpha=0.30, label="Heat wave")
+    switch    = mpatches.Patch(color=p[3], alpha=0.15, label="Switch in N-comp.")
+    heat_wave = mpatches.Patch(color=p[4], alpha=0.5, label="Heat wave")
     go_back   = mpatches.Patch(color=p[2], alpha=0.15, label="Return to symbiotic state")
     go_away   = mpatches.Patch(color=p[7], alpha=0.15, label="Switch to dysbiotic state")
     handles = [infect, switch, heat_wave, go_back, go_away]
@@ -240,7 +242,6 @@ def suppl_estab():
         #ax.axvspan(xlim[0], xlim[1], facecolor=p[7], alpha=0.15, zorder=-100)
 
 
-
 def big_aoa_plot(figsize):
     fig, axs = plt.subplots(3,3, figsize=figsize, sharex=True, sharey=True, constrained_layout=True)
 
@@ -284,7 +285,7 @@ def big_2D_plot(figsize):
     fig = plt.figure(figsize=figsize, constrained_layout=True)
     gs = gspec.GridSpec(nrows=2, ncols=3, width_ratios=[1, 1, 0.05], wspace=0.05, hspace=0.05, figure=fig)
     axs = np.empty((2,2), dtype=object)
-    fs = 10
+    cbars = np.empty(2, dtype=object)
 
     for i, cmap, var in zip([0, 1], ["plasma", "viridis"], ["H", "S"]):
         axs[i,0] = fig.add_subplot(gs[i,0])
@@ -293,10 +294,11 @@ def big_2D_plot(figsize):
 
         df = pd.concat([pd.read_csv("sims/2D_bifur_s_uEmax.csv"), pd.read_csv("sims/2D_bifur_s_pmax.csv")])   # Finding max value to scale colorbar
         vmax = df.loc[(df["name"] == var) & (df["fp_num"] == 3), "value"].max()                                                       # 
-        hm0 = plot_2D_bifur(path="sims/2D_bifur_s_uEmax.csv", var=var, ax=axs[i,0], vmax=vmax, cmap=cmap)
-        hm1 = plot_2D_bifur(path="sims/2D_bifur_s_pmax.csv",  var=var, ax=axs[i,1], vmax=vmax, cmap=cmap)
+        hm0 = plot_2D_bifur(path="sims/2D_bifur_s_uEmax.csv", var=var, ax=axs[i,0], vmax=vmax, cmap=cmap, red_line=False)
+        hm1 = plot_2D_bifur(path="sims/2D_bifur_s_pmax.csv",  var=var, ax=axs[i,1], vmax=vmax, cmap=cmap, red_line=False)
         cbar = fig.colorbar(hm1.collections[0], cax=cax)
         cbar.set_label(f"{var} {info.loc[var, "unit"]}") 
+        cbars[i] = cbar
 
     axs[0,0].set_xlabel("")
     axs[0,1].set_xlabel("")
@@ -308,11 +310,12 @@ def big_2D_plot(figsize):
 
     for ax, subname in zip(axs.ravel(), "abcd"):
         ax.text(0.02, 1, f"({subname})", transform=ax.transAxes, va="top", ha="left", fontweight = "bold")
-    #fig.tight_layout()
+    
+    return fig, axs, cbars
 
 
 ## Plots for beamer
-def _labels_legend(fig, axs, fs):
+def _labels_legend(fig, axs, fs, legend_loc="lower right"):
     ax0, ax1, twin0, twin1 = axs
 
     ## Fixing legends
@@ -320,13 +323,13 @@ def _labels_legend(fig, axs, fs):
     twin0.get_legend().remove()
     h, l = ax0.get_legend_handles_labels()         # Positioning and merging legends
     twin_h, twin_l = twin0.get_legend_handles_labels()
-    legend = twin0.legend(h+twin_h, l+twin_l, ncols=3, loc="lower right")
+    legend = twin0.legend(h+twin_h, l+twin_l, ncols=3, loc=legend_loc)
 
     ax1.get_legend().remove()
     twin1.get_legend().remove()
     h, l = ax1.get_legend_handles_labels()         # Positioning and merging legends
     twin_h, twin_l = twin1.get_legend_handles_labels()
-    legend = twin1.legend(h+twin_h, l+twin_l, ncols=1, loc="lower right")
+    legend = twin1.legend(h+twin_h, ["H net upt.", "S net upt.", "Sugar alloc."], ncols=1, loc=legend_loc)
     
     ## x and y labels
     ax0.set_ylabel(info.loc["H", "unit"],     fontsize=fs)
@@ -346,40 +349,56 @@ def beamer_sim():
         [[None, 0.1, None, None],            400,       [] ]
     ])
 
-    df0 = make_df(t,y,funcs)
+    df = make_df(t,y,funcs)
 
     sns.set_theme(context="notebook", style="ticks")
     ctx = sns.plotting_context("notebook") 
-    fig, axs = plt.subplots(2,1, figsize=(6,4), sharex=True, constrained_layout=True)
-    ax0, ax1 = axs
-    twin0 = ax0.twinx()
-    twin1 = ax1.twinx()
-    plot_sim(df0, ["H", "S"], ax0)
-    plot_sim(df0, ["S/H"], twin0, "linear")
-    plot_sim(df0, ["netNH", "netNS"], ax1, "linear")
-    plot_sim(df0, ["rhoPhoto"], twin1, "linear")
+    net_N_time = _find_crossing(df["$H$ net DIN upt."])
 
-    ax0.tick_params(axis="both",labelsize=ctx["axes.labelsize"]) # Fixing label fonts
-    ax1.tick_params(axis="both",labelsize=ctx["axes.labelsize"])
+    ybottom, ytop = [None, None], [None, None]
+    twin_ybottom, twin_ytop = [None, None], [None, None]
+    
+    for t_end in [450, 270, net_N_time[0]]:
+        df0 = df[ df.index <= t_end]
 
-    net_N_time = _find_crossing(df0["$H$ net DIN upt."])
-    titles = ["Biomass density", "Net DIN uptake and allocation rate of photosynthates"]
-    for i, ax in enumerate([ax0, ax1]):
-            xlim, ylim = ax.get_xlim(), ax.get_ylim()
-            background_color = plt.Rectangle((xlim[0],ylim[0]), xlim[1]-xlim[0], ylim[1]-ylim[0], facecolor="g", alpha=0.1, zorder=-100)
-            ax.add_patch(background_color)
-            ax.axvline(x=net_N_time[0], color="k",dashes=(1,1))
-            ax.axvline(x=270, color="k",dashes=(1,1))
-            ax.axhline(y=0,             color="k",dashes=(1,1))
-            
-            if i==0:
-                ax.text(x=xlim[0]+(-abs(xlim[0])+net_N_time)/2, y=0.8, s="I",   fontsize=14, fontweight="bold", fontname="Times New Roman")
-                ax.text(x=net_N_time+(270-net_N_time[0])/2,     y=0.8, s="II",  fontsize=14, fontweight="bold", fontname="Times New Roman")
-                ax.text(x=270+(xlim[1]-270)/2,                  y=0.8, s="III", fontsize=14, fontweight="bold", fontname="Times New Roman")
+        fig, axs = plt.subplots(2,1, figsize=(6,4), sharex=True, constrained_layout=True)
+        ax0, ax1 = axs
+        twin0 = ax0.twinx()
+        twin1 = ax1.twinx()
+        plot_sim(df0, ["H", "S"],         ax0,   "log",    ybottom[0], ytop[0])
+        plot_sim(df0, ["S/H"],            twin0, "linear", twin_ybottom[0], twin_ytop[0])
+        plot_sim(df0, ["netNH", "netNS"], ax1,   "linear", ybottom[1], ytop[1])
+        plot_sim(df0, ["rhoPhoto"],       twin1, "linear", twin_ybottom[1], twin_ytop[1])
 
-            ax.set_title(titles[i])
+        ax1.tick_params(axis="both",labelsize=ctx["axes.labelsize"])
+        ax0.tick_params(axis="both",labelsize=ctx["axes.labelsize"]) # Fixing label fonts
 
-    _labels_legend(fig,[ax0,ax1,twin0,twin1],ctx["axes.labelsize"])
+        titles = ["Biomass density (left) and symbiont load (right)", "Net N uptake (left) and allocation of sugars (right)"]
+
+        twin_axs = [twin0,twin1]
+        for i, ax in enumerate([ax0, ax1]):
+                xlim, ylim = ax.get_xlim(), ax.get_ylim()
+                twin_ylim  = twin_axs[i].get_ylim()
+                ybottom[i], ytop[i] = ylim[0], ylim[1]
+                twin_ybottom[i], twin_ytop[i] = twin_ylim[0], twin_ylim[1]
+
+                background_color = plt.Rectangle((xlim[0],ylim[0]), xlim[1]-xlim[0], ylim[1]-ylim[0], facecolor="g", alpha=0.1, zorder=-100)
+                ax.add_patch(background_color)
+                if t_end != net_N_time[0]:
+                    ax.axvline(x=net_N_time[0], color="k",dashes=(1,1))
+                if t_end == 450:
+                    ax.axvline(x=270, color="k",dashes=(1,1))
+                ax.axhline(y=0, color="k", dashes=(1,1))
+                
+                #if i==0:
+                #    ax.text(x=xlim[0]+(-abs(xlim[0])+net_N_time)/2, y=0.8, s="I",   fontsize=14, fontweight="bold", fontname="Times New Roman")
+                #    ax.text(x=net_N_time+(270-net_N_time[0])/2,     y=0.8, s="II",  fontsize=14, fontweight="bold", fontname="Times New Roman")
+                #    ax.text(x=270+(xlim[1]-270)/2,                  y=0.8, s="III", fontsize=14, fontweight="bold", fontname="Times New Roman")
+
+                ax.set_title(titles[i])
+        legend_loc = "center left" if t_end == net_N_time else "lower right"
+        _labels_legend(fig,[ax0,ax1,twin0,twin1],ctx["axes.labelsize"], legend_loc=legend_loc)
+        plt.savefig(f"figs/pdf_figs/beamer_sim_estab_{t_end}.pdf", bbox_inches="tight")
 
 
 def beamer_sim2(NI_val):
@@ -387,7 +406,7 @@ def beamer_sim2(NI_val):
     puls_size     = 1.5
     # Establishment under normal circumstances + s-puls
     t,y,funcs,cD = multEvents([100,10,0.001,0.001], [0,200], cons=[(NI,NI_val)], show_start=False, eventList=[
-        [[None, None,   None, None],            100,       [] ],
+        [[None, None,   None, None],            50,       [] ],
         [[None, None, None, None], puls_duration, [(s,puls_size)] ],
         [[None, None, None, None],           200,       [] ]
     ])
@@ -413,28 +432,28 @@ def beamer_sim2(NI_val):
     titles = ["Biomass density", "Net DIN uptake and allocation rate of photosynthates"]
     for i, ax in enumerate([ax0, ax1]):
             xlim, ylim = ax.get_xlim(), ax.get_ylim()
-            n_lim     = plt.Rectangle((xlim[0],ylim[0]), 500-xlim[0], ylim[1]-ylim[0], facecolor="g", alpha=0.1, zorder=-100)
-            heat_wave = plt.Rectangle((500,ylim[0]), puls_duration, ylim[1]-ylim[0], facecolor="r", alpha=0.4, zorder=-100)
-            n_lim2     = plt.Rectangle((500+puls_duration, ylim[0]), xlim[1]-500-puls_duration, ylim[1]-ylim[0], facecolor="g", alpha=0.1, zorder=-100)
+            n_lim     = plt.Rectangle((xlim[0],ylim[0]), 450-xlim[0], ylim[1]-ylim[0], facecolor="g", alpha=0.1, zorder=-100)
+            heat_wave = plt.Rectangle((450,ylim[0]), puls_duration, ylim[1]-ylim[0], facecolor="r", alpha=0.4, zorder=-100)
+            n_lim2     = plt.Rectangle((450+puls_duration, ylim[0]), xlim[1]-450-puls_duration, ylim[1]-ylim[0], facecolor="g", alpha=0.1, zorder=-100)
             for patch in [n_lim, heat_wave, n_lim2]: ax.add_patch(patch)
 
-            ax.axvline(x=500,               color="k",dashes=(1,1))
-            ax.axvline(x=500+puls_duration, color="k",dashes=(1,1))
+            ax.axvline(x=450,               color="k",dashes=(1,1))
+            ax.axvline(x=450+puls_duration, color="k",dashes=(1,1))
             ax.axhline(y=0,             color="k",dashes=(1,1))
             ax.set_title(titles[i])
-    ax0.text(x=xlim[0]+(500-xlim[0])/2, y=50, s="IV", fontsize=14, fontweight="bold", fontname="Times New Roman", ha="center")
-    ax0.text(x=500+puls_duration/2,     y=50, s="V",  fontsize=14, fontweight="bold", fontname="Times New Roman", ha="center")
-    ax0.text(x=500+puls_duration + (xlim[1]-500-puls_duration)/2, y=50, s="VI", fontsize=14, fontweight="bold", fontname="Times New Roman", ha="center")
+    ax0.text(x=xlim[0]+(450-xlim[0])/2, y=50, s="IV", fontsize=14, fontweight="bold", fontname="Times New Roman", ha="center")
+    ax0.text(x=450+puls_duration/2,     y=50, s="V",  fontsize=14, fontweight="bold", fontname="Times New Roman", ha="center")
+    ax0.text(x=450+puls_duration + (xlim[1]-450-puls_duration)/2, y=50, s="VI", fontsize=14, fontweight="bold", fontname="Times New Roman", ha="center")
     _labels_legend(fig, [ax0,ax1,twin0,twin1], ctx["axes.labelsize"])
 
 
 def beamer_heat_wave(NI_val):
-    puls_duration = 40
+    puls_duration = 35
     puls_size     = 1.5
     # Establishment under normal circumstances + s-puls
     t,y,funcs,cD = multEvents([100,10,0.001,0.001], [0,200], cons=[(NI,NI_val)], show_start=False, eventList=[
-        [[None, None,   None, None],            100,       [] ],
-        [[None, None, None, None], puls_duration, [(s,puls_size)] ],
+        [[None, None,   None, None],            50,       [] ],
+        [[None, None, None, None], puls_duration, [(eps,puls_size)] ],
         [[None, None, None, None],           200,       [] ]
     ])
 
@@ -456,36 +475,76 @@ def beamer_heat_wave(NI_val):
     ax0.tick_params(axis="both",labelsize=ctx["axes.labelsize"])
     ax1.tick_params(axis="both",labelsize=ctx["axes.labelsize"])
 
-    titles = ["Biomass density", "Net DIN uptake and allocation rate of photosynthates"]
+    titles = ["Biomass density (left) and symbiont load (right)", "Net N uptake (left) and allocation of sugars (right)"]
     for i, ax in enumerate([ax0, ax1]):
             xlim, ylim = ax.get_xlim(), ax.get_ylim()
-            n_lim     = plt.Rectangle((xlim[0],ylim[0]), 500-xlim[0], ylim[1]-ylim[0], facecolor="g", alpha=0.1, zorder=-100)
-            heat_wave = plt.Rectangle((500,ylim[0]), puls_duration, ylim[1]-ylim[0], facecolor="r", alpha=0.4, zorder=-100)
-            n_lim2     = plt.Rectangle((500+puls_duration, ylim[0]), xlim[1]-500-puls_duration, ylim[1]-ylim[0], facecolor="r", alpha=0.1, zorder=-100)
+            n_lim     = plt.Rectangle((xlim[0],ylim[0]), 450-xlim[0], ylim[1]-ylim[0], facecolor="g", alpha=0.1, zorder=-100)
+            heat_wave = plt.Rectangle((450,ylim[0]), puls_duration, ylim[1]-ylim[0], facecolor="r", alpha=0.4, zorder=-100)
+            n_lim2     = plt.Rectangle((450+puls_duration, ylim[0]), xlim[1]-450-puls_duration, ylim[1]-ylim[0], facecolor="g", alpha=0.1, zorder=-100)
             for patch in [n_lim, heat_wave, n_lim2]: ax.add_patch(patch)
 
-            ax.axvline(x=500,               color="k",dashes=(1,1))
-            ax.axvline(x=500+puls_duration, color="k",dashes=(1,1))
+            ax.axvline(x=450,               color="k",dashes=(1,1))
+            ax.axvline(x=450+puls_duration, color="k",dashes=(1,1))
             ax.axhline(y=0,             color="k",dashes=(1,1))
             ax.set_title(titles[i])
-    ax0.text(x=xlim[0]+(500-xlim[0])/2, y=50, s="IV", fontsize=14, fontweight="bold", fontname="Times New Roman", ha="center")
-    ax0.text(x=500+puls_duration/2,     y=50, s="V",  fontsize=14, fontweight="bold", fontname="Times New Roman", ha="center")
-    ax0.text(x=500+puls_duration + (xlim[1]-500-puls_duration)/2, y=50, s="VI", fontsize=14, fontweight="bold", fontname="Times New Roman", ha="center")
+    #ax0.text(x=xlim[0]+(450-xlim[0])/2, y=50, s="IV", fontsize=14, fontweight="bold", fontname="Times New Roman", ha="center")
+    #ax0.text(x=450+puls_duration/2,     y=50, s="V",  fontsize=14, fontweight="bold", fontname="Times New Roman", ha="center")
+    #ax0.text(x=450+puls_duration + (xlim[1]-450-puls_duration)/2, y=50, s="VI", fontsize=14, fontweight="bold", fontname="Times New Roman", ha="center")
     _labels_legend(fig, [ax0,ax1,twin0,twin1], ctx["axes.labelsize"])
 
+    plt.savefig("figs/pdf_figs/beamer_sim_heat_wave_ol.pdf", bbox_inches="tight")
 
-#### Running stuff ##############################################################
+
+def beamer_2D_bifur():
+    fig, axs, cbars = big_2D_plot((6,5))
+    # Set new labels
+    axs[0,0].set_ylabel("Metabolic costs")
+    axs[1,0].set_ylabel("Metabolic costs")
+    axs[1,0].set_xlabel("Nitrogen uptake")
+    axs[1,1].set_xlabel("Photosynthesis")
+
+    cbars[0].set_label("Host biomass")
+    cbars[1].set_label("Symbiont biomass")
+
+    plt.savefig("figs/pdf_figs/beamer_2D_bifur.pdf", bbox_inches="tight")
+
+
+def beamer_aoa():
+    fig, axs = plt.subplots(3,3, figsize=(6,5), sharex=True, sharey=True, constrained_layout=True)
+
+    for i, NI_val in enumerate([9e-05, 0.00027, 0.00045]):
+        for j, eps_val in enumerate([1, 1.1, 1.2]):
+            im = plot_aoa(f"sims/aoa_N_I={NI_val}_s={eps_val}_raw.txt", [0,-1], ax=axs[i,j])
+            fps = find_all_fps([(NI,NI_val), (eps,eps_val)])
+            if fps[3]:
+                line, = axs[i,j].plot(fps[3][0],fps[3][1]/fps[3][0], marker="x", ms=5, color="white", markeredgewidth=1.5, zorder=10)
+                line.set_path_effects([pe.Stroke(linewidth=4, foreground="black"), pe.Normal()])
+            if i in [0,1]: axs[i,j].xaxis.set_visible(False)
+            if j in [1,2]: axs[i,j].yaxis.set_visible(False)
+            axs[i,j].set_xlabel("")
+            axs[i,j].set_ylabel("") 
+
+    axs[2,1].set_xlabel("Host biomass $(H)$")
+    axs[1,0].set_ylabel("Symbiotic load $(E/H)$")
+    axs[0,1].set_title(r"$-$ Metabolic costs $\longrightarrow$", fontsize=14)
+    axs[1,2].text(1, 0.5, r"$-$ Env. N $\longrightarrow$", rotation=-90, ha="left", va="center", transform=axs[1, 2].transAxes, fontsize=14)
+    cbar = fig.colorbar(im, ax=axs, label="Probability to enter the symbiotic state", orientation="vertical", fraction=0.05, pad=0.04)
+    
+    plt.savefig("figs/pdf_figs/beamer_aoa.pdf", bbox_inches="tight")
+
+
+#### Creating data and plots ##############################################################
 def make_data():
     ## All 1D bifurcations
     #save_bifur_data(save_name="bifur_df")
 
     ## Area of attraction plots
-    #prob_of_states(n=30000, cons=[])
-    #prob_of_states(n=30000, cons=[(NI,0.00027)])
-    #prob_of_states(n=30000, cons=[(s,1.2)])
-    #prob_of_states(n=30000, cons=[(uSmax,0.02)])
-    #prob_of_states(n=30000, cons=[(uSmax,0.05)])
-    #prob_of_states(n=30000, cons=[(NI,0.0009)])
+    for NI_val in [9e-05, 27e-05, 45e-05]:
+        for eps_val in [1.0, 1.1, 1.2]:
+            prob_of_states(n=30000, cons=[(NI,NI_val), (eps,eps_val)])
+            
+    prob_of_states(n=30000, cons=[(uSmax,0.02)])
+    prob_of_states(n=30000, cons=[(uSmax,0.05)])
 
     ## 2D bifurcations
     #make_2D_bifur(s,uSmax,[1,1.5],[0.001,0.07], 15, save_name="s_uSmax")
@@ -496,12 +555,10 @@ def make_data():
     #make_2D_bifur(s,CI,[1,1.5],[0.07,0.15], 15, save_name="s_CI")
 
     #make_2D_bifur(s,rho0,[1,1.5],[0.001,0.1], 15, save_name="s_rhoFood")
-    make_2D_bifur(s,QFood,[1,1.5],[0.01,0.20], 15, save_name="s_QFood")
+    #make_2D_bifur(s,QFood,[1,1.5],[0.01,0.20], 15, save_name="s_QFood")
 
 
 def plot_and_save():
-    figsize = (6,6)  # common figsize for all plots
-
     ## Plot large simulation displaying estab
     #big_sim(figsize=(6,6))
     #plt.savefig("figs/plotted_sims/estab_plus_heat_wave.png", dpi=300, bbox_inches="tight") 
@@ -514,14 +571,14 @@ def plot_and_save():
 
 
     ## Plot 2D bifurcations
-    #big_2D_plot((6,5))                               
+    big_2D_plot((6,5))                               
     #plt.savefig("figs/plotted_sims/2D_bifur.png", dpi=300, bbox_inches="tight")
     #plt.savefig("figs/pdf_figs/2D_bifur.pdf", bbox_inches="tight")
 
     ## Supplementary plots
-    plot_bifur("sims/bifur_df", [eps, rho0, NI, CI ],       save_name="bifur_external")
-    plot_bifur("sims/bifur_df", [uSmax, KNS, pmax, KCO2], save_name="bifur_symbiont")
-    #plot_bifur("sims/bifur_df", [eps])
+    #plot_bifur("sims/bifur_df.csv", [eps, rho0, NI, CI ],       save_name="bifur_external")
+    #plot_bifur("sims/bifur_df.csv", [uSmax, KNS, pmax, KCO2], save_name="bifur_symbiont")
+    
 
     #suppl_aoa_plot((6,5/3))
     #plt.savefig("figs/plotted_sims/suppl_aoa.png", dpi=300, bbox_inches="tight")
@@ -533,27 +590,15 @@ def plot_and_save():
 
 
 def plot_slide_pics():
-    beamer_sim()
-    plt.savefig("figs/pdf_figs/beamer_sim_estab.pdf", bbox_inches="tight")
-
-    #beamer_sim2(9e-5)
-    #plt.savefig("figs/pdf_figs/beamer_sim_heat_wave.pdf", bbox_inches="tight")
-
-    #beamer_sim2(45e-5)
-    #plt.savefig("figs/pdf_figs/beamer_sim_heat_wave_eutr.pdf", bbox_inches="tight")
-
+    #beamer_sim()
     beamer_heat_wave(9e-5)
-    plt.savefig("figs/pdf_figs/beamer_sim_heat_wave_long.pdf", bbox_inches="tight")
+    #beamer_2D_bifur()
+
+    #beamer_aoa()
 
 
 if __name__ == "__main__":
-    #make_data()
-    #plot_bifur("sims/bifur_df", [s, uSmax, NI])
-    
-    #plot_aoa(f"sims/aoa__u_E,max=0.02_N_I=0.0009_raw.txt", [0,-1])
-    #plot_2D_bifur(path="sims/2D_bifur_s_CI.csv", var="S")
-    #plot_2D_bifur(path="sims/2D_bifur_s_rhoFood.csv", var="S", cmap="viridis")
-
+    make_data()
     plot_and_save()
     #plot_slide_pics()
 

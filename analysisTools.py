@@ -1,12 +1,12 @@
-#Tools to analyse coral model (created 20/6)
+#################################################################
+### This script contains functions used to evaluted the model ###
+#################################################################
 
 from model import *
 
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gspec
 plt.rc('text.latex', preamble=r'\usepackage{amsmath}')
-#plt.rcParams['text.usetex']=True
-#plt.rcParams['text.latex.preamble']=r'\makeatletter \newcommand*{\rom}[1]{\expandafter\@slowromancap\romannumeral #1@} \makeatother'
 
 import seaborn as sns
 
@@ -32,16 +32,16 @@ info = pd.DataFrame(
             ["$S$",                   "$S$",                       r"mol C$_\text{org}$/m$^2$",     "Organism biomass",         p[2], (1,0)],
             ["$N$",                   "$N$",                       r"mol DIN/mol C$_\text{org}$",   "Inorganic pool",           p[4], (1,0)],
             ["$C$",                   "$C$",                       r"mol DIC/mol C$_\text{org}$",   "Inorganic pool",           p[3], (1,0)],
-            ["$S/H$",                 "$S/H$",                     "molar ratio",                   "Symbiont load",            p[1], (1,0)],
+            ["$S/H$",                 "$S/H$",                     "-",           "Symbiont load",            p[1], (1,0)],
 
             [r"$\mu_H$",              "$H$ GR",                    "1/d",                  "Host carbon flux",         p[0], (1,0)],
             [r"$\mu_S$",              "$R$ GR",                    "1/d",                  "Endosymbiont carbon flux", p[2], (1,0)],
             ["$f$",                   "HFR",                       "1/d",                  "Host carbon flux",         p[7], (1,0)],
             ["$p_H$",                 "PAR",                       "1/d",                  "Host carbon flux",         p[1], (1,0)],
             ["$p_S$",                 "DIC fication rate",         "1/d",                  "Endosymbiont carbon flux", p[2], (2,2)],
-            ["$r_H$",                 "$H$ resp. rate",            "1/d",                  "Inorganic carbon flux",    p[0], (2,2)],
+            ["$r_H$",                 "$H$ resp. rate",            r"mol DIC/mol C$_\text{org}$/d",                  "Inorganic carbon flux",    p[0], (2,2)],
             ["$r_S$",                 "$S$ resp. rate",            "1/d",                  "Inorganic carbon flux",    p[2], (2,2)],
-            ["$H$ net DIN upt.",      "$H$ net DIN upt.",          "1/d",                  "Inorganic nutrient flux",  p[0], (1,0)],
+            ["$H$ net DIN upt.",      "$H$ net DIN upt.",          r"mol DIN/mol C$_\text{org}$/d",                  "Inorganic nutrient flux",  p[0], (1,0)],
             ["$S$ net DIN upt.",      "$S$ net DIN upt.",          "1/d",                  "Inorganic nutrient flux",  p[2], (1,0)],
             ["$e_H$",                 "$H$ net growth efficiancy", "-",                             "Net growth efficiency",    p[0], (1,0)],
             ["$e_S$",                 "$S$ net growth efficiancy", "-",                             "Net growth efficiency",    p[2], (1,0)]],
@@ -163,17 +163,17 @@ def find_all_fps(cons=[], ignore_H_lim = True):
     """
     cD = make_cons(cons)
 
-    if not ignore_H_lim:                           ## This should maybe be gone through once more
+    if not ignore_H_lim:                          
         fps = []
         for i, j in [(0,0), (0,1), (1,1), (1,0)]:
             fps = fps + _curate_fps(check_for_fps(i,j,cD), [i,j], cD)
-        return fps #OBS unorded here!
+        return fps #OBS returned unorded!
     
     fps = [None]*4
     S_not_N_lim = _curate_fps(check_for_fps(0,0,cD), [0,0], cD)
     S_N_lim     = _curate_fps(check_for_fps(0,1,cD), [0,1], cD)
 
-    if len(S_not_N_lim)+len(S_N_lim)>4:
+    if len(S_not_N_lim)+len(S_N_lim)>4:           # Sanity check. At most 4 fixed points should exist when H is not nitrogen limited
         raise ValueError("More than 4 feasible fixed points found. Investigate ODE and parametrization!")
 
     i = 0
@@ -195,10 +195,9 @@ def find_all_fps(cons=[], ignore_H_lim = True):
     return fps
 
 
-def makeSymbBifur(para,span,cons=[],ignore_H_lim=True): 
-    pValues = np.linspace(span[0],span[1],30)   ## <---------------
+def make_symb_bifur(para,span,cons=[],ignore_H_lim=True): 
+    pValues = np.linspace(span[0],span[1],30)   
     fixList = []
-    fp_names = ["Trivial", "Parasitic", "Healthy", "Healthy"]
     try:
         for p in tqdm(pValues,desc=f"Progress for parameter: {para}, in range: {span}", unit="run"):
             new_cons = cons + [(para,p)]
@@ -215,140 +214,61 @@ def makeSymbBifur(para,span,cons=[],ignore_H_lim=True):
     return fixList
 
 
-##### Bifurcation diagrams by using automatic differentiation #############  Needed to go through once more before publication 
-def make_jac(f):
-    return jax.jacfwd(f)
+##### Bifurcation diagrams by using automatic differentiation and numerical root finding #############  
+def find_fp_num(func, x0):
+    sol = opt.root(func, x0, method="hybr", tol=1e-12, options={"xtol":1e-12,"maxfev":0,"eps":0.1})
+    if sol.success:
+        return sol.x
+    else:
+        return None
 
 
-def check_stab(yStar,cD):
-    """Checking stability of fixed point using automatic differentiation
+def check_aut_stab(func, ystar):
+    jac = jax.jacfwd(func)
+    eigenvals, _ = la.eig(jac(ystar), check_finite=False)
+    for eig in eigenvals:
+        if eig.real>0: return False
+    return True
+
+
+def make_num_bifur(para, span, base_cons=[]):
+    """Creates a numerically solved bifuraction diagram starting from a the standard symbolic solution for fixed points. Used to compare results to smooth approxmations
     
     Args:
-        yStar (array-like): The fixed point
-        cD (dict or dataframe): Dictionary of parametervalues
+        para (sp.Symbol): The sympy symbol of the parameter 
+        span (list): 2D list choosing parameter span of bifurcation diagram
+        base_cons (list): List of base parameter values
     
     Returns:
-        Bool: True if stable, False otherwise"""
-    
-    J = make_jac(lambda y: endo(0,y,cD,minFunc=jax.numpy.minimum))
-    J_subbed = jax.numpy.array(J(jax.numpy.array(yStar)))
-    eig, _ = jax.numpy.linalg.eig(J_subbed)
-    if all(val.real<0 for val in eig):
-        return True
-    else:
-        return False
+        None
+    """
+    standard_para_value = make_cons(base_cons)[para]
+    step = (span[1]-span[0])/150
 
+    symb_fps = find_all_fps(base_cons)
+    data = []
+    for fp_num, standard_fp in enumerate(symb_fps):
+        for k in range(2):
+            para_list = np.arange(standard_para_value, span[k], (-1)**(k+1)*step)
+            fp_old = np.array(standard_fp, dtype="float64")
+            for para_value in para_list:
+                cD = make_cons(base_cons+[(para,para_value)])
+                func = lambda y: endo(0,y,cD,min_func=min_approx)
 
-def aut_bifur(para,p_values,y0,fp_num=None,cons=[]):
-    fixList = []
-    for p in p_values:
-        cD = make_cons(cons+[(para,p)])
-        f = lambda y: endo(0,y,cD,minFunc=min_approx)
-        J = make_jac(f)
-        sol = opt.root(f, y0, method="hybr", tol=1e-10, options={"xtol":1e-10,"maxfev":0,"eps":0.1})
-        if sol.success and all(val>=0 for val in sol.x):
-            fixList.append(np.concatenate( [[p], sol.x, [fp_num] ,[check_stab(sol.x,cD)]]))
-        else:
-            fixList.append( [p] + [np.nan]*len(sol.x) + [fp_num] + [False])
-        y0 = sol.x
-    return fixList
+                fp = find_fp_num(func, fp_old)
+                if fp is not None:
+                    stab = check_aut_stab(func, fp)
+                    data.append([para_value, fp[0], f"H{fp_num}", stab])
+                    data.append([para_value, fp[1], f"S{fp_num}", stab])
+                    fp_old = fp
 
-
-def make_aut_bifur(para,span,cons=[]):
-    cD = make_cons(cons)
-    standardVal = cD[para]
-    step = (span[1]-span[0])/200
-
-    curatedFps = []
-    for state in [[0,0], [0,1] ]:     #, [1,1], [1,0]]:
-        fixedPoints = sorted(check_for_fps(state[0],state[1],cD),key=_key,reverse=True)
-        for fp in fixedPoints:
-            if all(val>=0 for val in fp) and check_illegal(state,fp,cD): 
-                curatedFps.append(np.array(fp,dtype="float64"))
-    curatedFps = sorted(curatedFps,key=_key)
-
-    fix_list = []
-    for i in range(len(curatedFps)):
-        fp = curatedFps[i]
-        for j in range(2):
-            pList = np.arange(standardVal,span[j],(-1)**(j+1)*step)
-            fix_list = fix_list + aut_bifur(para,pList,fp,fp_num=i,cons=cons)
-    
-    return np.array(fix_list)
-
-
-##### Bifurcation diagrams by numerically solving for the fixed point #####  IF above is correctly implemented lets remove this
-def checkStab(yStar,cD):
-    """Numerically checking stability of fixed point
-    
-    Input
-    yStar: array-like fixed point
-    cD: dict or dataframe of parametervalues
-    
-    Output
-    Bool: True if stable, False otherwise"""
-    
-    res = diff.jacobian(lambda y: endo(0,y,cD), yStar, order=10, initial_step=0.1, maxiter=100, tolerances={"rtol":1e-12, "atol":1e-12} )
-    eig, _ = la.eig(res.df, check_finite=False)
-    #print(res.df)
-    print(f"eigenvalues: {max([np.real(val) for val in eig])}")
-    if all(val.real<0 for val in eig):
-        return True
-    else:
-        return False
-
-
-def numBifur(para,pValues,y0,cons=[]): 
-    fixList = []
-    for p in pValues:
-        cD = make_cons(cons+[(para,p)])
-        sol = opt.root(lambda y: endo(0,y,cD,minFunc=min_approx), y0, method="hybr", tol=1e-12, options={"xtol":1e-12,"maxfev":0,"eps":0.1})
-        if sol.success and all(val>=0 for val in sol.x):
-            stab = checkStab(sol.x, cD)
-            fixList.append( np.concatenate([ [p],y0,[stab] ]) )
-            print(f"{para}: {p}, H: {round(sol.x[0],3)}, S: {round(sol.x[1],10)}, N: {round(sol.x[2],10)}, C: {round(sol.x[3],10)}, stable = {stab}")
-        y0 = sol.x
-    return np.array(fixList)
-
-
-def makeNumBifur(para,span,cons=[]):
-    cD = make_cons(cons)
-    fixedPoints = check_for_fps(0,1,cD) + check_for_fps(0,0,cD) # check_for_fps(1,0,cD) + check_for_fps(1,1,cD)
-    standardVal = cD[para]
-    step = (span[1]-span[0])/100
-    mList, m = ["s", "o", "^", ">", "H"] + ["o"]*20, 0
-    for i in range(len(fixedPoints)):
-        fp = np.array(fixedPoints[i],dtype="float64")
-        if all(val>=0 for val in fp):
-            for j in range(2):
-                pList = np.arange(standardVal,span[j],(-1)**(j+1)*step)
-                fixList = numBifur(para,pList,fp,cons=cons)
-                for k in range(0,len(fixList[:,0]),1):
-                    if j == 1 and k == 0: continue
-                    c = None if fixList[k,-1] else "red" 
-                    plt.plot(fixList[k,0], fixList[k,1], color = "C0", mec = c, marker = mList[m], ms= 5.0, alpha=0.6, ls="", label = "$H^*$")
-                    plt.plot(fixList[k,0], fixList[k,2], color = "C2", mec = c, marker = mList[m], ms= 5.0, alpha=0.6, ls="", label = "$E^*$")
-            m += 1
-    plt.xlabel(para)
-    plt.ylabel("$H^*$, $E^*$ (mol C/m$^2$)")
-    #plt.savefig("figs2/num_bifur_" + para + ".png")
-
-
-def makeNumBifur2(para,span,fixedPoints,cons=[]):  ## Obs doesn't check if fixed points are viable!                        
-    standardVal = make_cons(cons)[para]
-    step = (span[1]-span[0])/300
-
-    bTable = np.empty((0,6))
-    for i in range(len(fixedPoints)):
-        fp = np.array(fixedPoints[i],dtype="float64")
-        for j in range(2):
-            pList = np.arange(standardVal,span[j],(-1)**(j+1)*step)
-            fixList = numBifur(para,pList,fp,cons)
-            if j==0:
-                bTable = np.r_[bTable, fixList[::-1]] 
-            else: 
-                bTable = np.r_[bTable, fixList[1:,:]] 
-    return bTable
+    df = pd.DataFrame(data, columns=["para_value", "value", "point_type", "stability"])
+    palette = sns.color_palette("Blues", n_colors=4) + sns.color_palette("Greens", n_colors=4)
+    g = sns.scatterplot(df, x="para_value", y="value", hue="point_type", hue_order=["H0", "H1", "H2", "H3", "S0", "S1", "S2", "S3"], palette=palette,  
+                    style="stability", style_order=[True, False])
+    g.set_ylabel(info.loc["H", "unit"])
+    g.set_xlabel(f"${para.name}$")
+    plt.show()
 
 
 
@@ -384,13 +304,13 @@ def save_bifur_data(paras=None, cons=[], save_name=""):
 
     data = []
     for p, span in subset.items():
-        data = data + makeSymbBifur(p, span, cons, ignore_H_lim=True)
+        data = data + make_symb_bifur(p, span, cons, ignore_H_lim=True)
     
     df = pd.DataFrame(data, columns=["para_name", "para_value", "H", "S", "N", "C", "fp_num", "stable"])
     df_long = df.melt(id_vars=["para_name", "para_value", "fp_num", "stable"], var_name="var_name", value_name="var_value")
 
     if save_name:
-        df_long.to_csv("sims/"+save_name, index=False)
+        df_long.to_csv("sims/"+save_name+".csv", index=False)
     return df_long
 
 
@@ -544,21 +464,6 @@ def _saveable_name(para):
     return para.name.replace("\\","").replace("{","").replace("}","")
 
 
-def plot_aut_bifur(): #still needs work
-    fix_list = make_aut_bifur(para=uSmax,span=[0.0,0.04],cons=[(pmax,0.5), (uSmax,0.035), (mS,0.03), (NI,1e-4)])
-
-    unstable = fix_list[:,-1] == False
-    stable = fix_list[:,-1] == True
-    for i in range(2):
-        m, ms, alpha = "o", 3.0, 0.7
-        plt.plot(fix_list[unstable,0], fix_list[unstable,2], color = "C2", marker = m, mfc = "none", ms= ms, alpha=alpha, ls="")
-        plt.plot(fix_list[stable,0],   fix_list[stable,2],   color = "C2", marker = m,               ms= ms, alpha=alpha, ls="")
-
-        plt.plot(fix_list[unstable,0], fix_list[unstable,1], color = "C0", marker = m, mfc = "none", ms= ms, alpha=alpha, ls="")
-        plt.plot(fix_list[stable,0],   fix_list[stable,1],   color = "C0", marker = m,               ms= ms, alpha=alpha, ls="")
-    plt.show()
-
-
 def plot_sim(df, var_list, ax=None, yscale="log", ybottom=None, ytop=None):
     """Plots specified variable in line plot
     
@@ -659,7 +564,7 @@ def plot_bifur(path, paras, vars = ["H", "S"], save_name = ""):
     return g
 
 
-def plot_2D_bifur(path, var, vmax=None, ax=None, save_name="", cbar=False, cmap="plasma", annot=False):
+def plot_2D_bifur(path, var, vmax=None, ax=None, save_name="", cbar=False, cmap="plasma", annot=False, red_line=False):
     """
     Plots 2D bifurcation diagram of given dataframe. Dataframe should have been created using make_2D_bifur()-function
     
@@ -698,7 +603,9 @@ def plot_2D_bifur(path, var, vmax=None, ax=None, save_name="", cbar=False, cmap=
 
     sns.heatmap(sub_df.iloc[::-1], linewidth=0.5, vmin=0, vmax=vmax, annot=annot_df, fmt="", annot_kws={"color":"white"}, 
                                     cbar_kws={"label": info.loc[var, "unit"]}, cmap=cmap, ax=ax, cbar=cbar)  #cmap="magma", "plasma", "cividis" all cbf
-    ax.axhline(y=5, color="red", ls="--")
+    
+    if red_line: ax.axhline(y=5, color="red", ls="--")
+    
     skip = 3
     xtick_pos = np.arange(0, sub_df.shape[1], skip) + 0.5
     xtick_lab = [f"{x:.2f}" for x in sub_df.columns[::skip]]
@@ -799,14 +706,6 @@ def plot_aoa(path, plot_vars, grid_size = 30, save_name = "", ax=None):
 
 
 if __name__ == "__main__":  
-    #df = make_2D_bifur(s, eps, [1, 1.5], [0.0, 0.09], grid_size=15, save_name="s_eps")
-    #plot_2D_bifur("sims/2D_bifur_s_eps.csv", "S")
-
-    print(p[4],p[3])
-
-    #plot_area_of_attraction([0,-1], [1, 0.01], [110, 1], grid_size=10, cons=[(rho0,0.07)]) 
-
-    #df = pd.read_csv("sims/bifur_df")
-    #plot_bifur("sims/bifur_df", [QFood])
+    make_num_bifur(uSmax,[0.005,0.08])
+    make_num_bifur(eps,[1,1.3])
     
-    plt.show()

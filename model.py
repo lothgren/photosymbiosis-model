@@ -1,6 +1,10 @@
-## Model ODEs for endosymbiosis model
+#############################################################################################################
+### This script contains the ODE function of the photosymbiosis model as well as a sympy symbolic version ###
+#############################################################################################################
+
 import numpy as np
 import sympy as sp
+
 
 H, S, N, C = sp.symbols("H S N C", real=True)
 eps, to, g, pmax, KCO2, delC, CI, mS, mH, rho0, HCap, delN, NI, KNS, uSmax, KNH, uHmax, QS, QH, QFood, iota = sp.symbols(
@@ -15,16 +19,17 @@ def make_cons(changes=[]):
     return paraValues
 
 
-def min_approx(a,b,e=1e-2):
+def min_approx(a,b,e=1e-5):
     return ( a+b - ((a-b)**2+e)**(1/2) )/2
 
-def max_approx(a,b,e=1e-2):
+
+def max_approx(a,b,e=1e-5):
     return ( a+b + ((a-b)**2+e)**(1/2) )/2
 
 
 def make_funcs(t, y, cD, min_func = np.minimum, max_func = np.maximum):  
     H, S, N, C = y
-    rhoDOC = max_func(0,cD[rho0]*(1-H/cD[HCap]))   #Maximum inclided to avoid spScial intitial values to produce un-ecological results
+    rhoDOC = cD[rho0]*(1-H/cD[HCap]) #max_func(0,cD[rho0]*(1-H/cD[HCap]))   #Maximum inclided to avoid spScial intitial values to produce un-ecological results
     rhoDON = rhoDOC*cD[QFood]
 
     uH = cD[uHmax] *(N)/( cD[KNH] + N )
@@ -150,7 +155,7 @@ if __name__ == "__main__":
         plt.plot(t,eH,"C0")
         plt.plot(t,eS,"C2")
     
-    y0 = [5, 0.001, 1e-06, 1e-05]
+    y0 = [20, 0.001, 1e-06, 1e-05]
     tEnd = 300
     cD = make_cons([])
 

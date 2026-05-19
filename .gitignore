@@ -196,5 +196,6 @@ cython_debug/
 
 ## Added by meself
 /figs
+/sims_old
 /sims
 /testing.py
