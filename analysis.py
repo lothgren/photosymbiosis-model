@@ -223,8 +223,8 @@ def suppl_estab():
 
     axs[0,0].tick_params(axis="x", which="both", bottom=False, labelbottom=False)
     axs[0,1].tick_params(axis="x", which="both", bottom=False, labelbottom=False)
-    axs[1,0].set_xlabel("days", fontsize=outer_fs)
-    axs[1,1].set_xlabel("days", fontsize=outer_fs)
+    axs[1,0].set_xlabel("d", fontsize=outer_fs)
+    axs[1,1].set_xlabel("d", fontsize=outer_fs)
 
     ctx = sns.plotting_context("paper")
     twin00.tick_params(axis="both", labelsize=ctx["axes.labelsize"])
@@ -246,8 +246,8 @@ def big_aoa_plot(figsize):
     fig, axs = plt.subplots(3,3, figsize=figsize, sharex=True, sharey=True, constrained_layout=True)
 
     for i, NI_val in enumerate([9e-05, 0.00027, 0.00045]):
-        for j, eps_val in enumerate([1, 1.1, 1.2]):
-            im = plot_aoa(f"sims/aoa_N_I={NI_val}_s={eps_val}_raw.txt", [0,-1], ax=axs[i,j])
+        for j, eps_val in enumerate([1.0, 1.1, 1.2]):
+            im = plot_aoa(f"sims/aoa_N_I={NI_val}_epsilon={eps_val}_raw.txt", [0,-1], ax=axs[i,j])
             fps = find_all_fps([(NI,NI_val), (eps,eps_val)])
             if fps[3]:
                 line, = axs[i,j].plot(fps[3][0],fps[3][1]/fps[3][0], marker="x", ms=5, color="white", markeredgewidth=1.5, zorder=10)
@@ -265,8 +265,8 @@ def suppl_aoa_plot(figsize):
     fig, axs = plt.subplots(1,3, figsize=figsize, sharex=True, sharey=True, constrained_layout=True)
     fs = 10
 
-    for j, eps_val in enumerate([1,1.1,1.2]):
-        im = plot_aoa(f"sims/aoa_uEmax=0.0325_s={eps_val}_raw.txt", [0,-1], ax=axs[j])
+    for j, eps_val in enumerate([1.0,1.1,1.2]):
+        im = plot_aoa(f"sims/aoa_u_S,max=0.0325_epsilon={eps_val}_raw.txt", [0,-1], ax=axs[j])
 
         fps = find_all_fps([(uSmax,0.0325), (eps,eps_val)])
         if fps[3]:
@@ -292,10 +292,10 @@ def big_2D_plot(figsize):
         axs[i,1] = fig.add_subplot(gs[i,1])
         cax = fig.add_subplot(gs[i,2])
 
-        df = pd.concat([pd.read_csv("sims/2D_bifur_s_uEmax.csv"), pd.read_csv("sims/2D_bifur_s_pmax.csv")])   # Finding max value to scale colorbar
+        df = pd.concat([pd.read_csv("sims/2D_bifur_eps_uSmax.csv"), pd.read_csv("sims/2D_bifur_eps_pmax.csv")])   # Finding max value to scale colorbar
         vmax = df.loc[(df["name"] == var) & (df["fp_num"] == 3), "value"].max()                                                       # 
-        hm0 = plot_2D_bifur(path="sims/2D_bifur_s_uEmax.csv", var=var, ax=axs[i,0], vmax=vmax, cmap=cmap, red_line=False)
-        hm1 = plot_2D_bifur(path="sims/2D_bifur_s_pmax.csv",  var=var, ax=axs[i,1], vmax=vmax, cmap=cmap, red_line=False)
+        hm0 = plot_2D_bifur(path="sims/2D_bifur_eps_uSmax.csv", var=var, ax=axs[i,0], vmax=vmax, cmap=cmap, red_line=False)
+        hm1 = plot_2D_bifur(path="sims/2D_bifur_eps_pmax.csv",  var=var, ax=axs[i,1], vmax=vmax, cmap=cmap, red_line=False)
         cbar = fig.colorbar(hm1.collections[0], cax=cax)
         cbar.set_label(f"{var} {info.loc[var, "unit"]}") 
         cbars[i] = cbar
@@ -536,57 +536,59 @@ def beamer_aoa():
 #### Creating data and plots ##############################################################
 def make_data():
     ## All 1D bifurcations
-    #save_bifur_data(save_name="bifur_df")
+    save_bifur_data(save_name="bifur_df")
 
     ## Area of attraction plots
     for NI_val in [9e-05, 27e-05, 45e-05]:
         for eps_val in [1.0, 1.1, 1.2]:
             prob_of_states(n=30000, cons=[(NI,NI_val), (eps,eps_val)])
-            
-    prob_of_states(n=30000, cons=[(uSmax,0.02)])
-    prob_of_states(n=30000, cons=[(uSmax,0.05)])
+    
+    for eps_val in [1.0, 1.1, 1.2]:
+        prob_of_states(n=30000, cons=[(uSmax, 0.0325), (eps,eps_val)])
+        prob_of_states(n=30000, cons=[(uSmax, 0.05), (eps,eps_val)])
+
 
     ## 2D bifurcations
-    #make_2D_bifur(s,uSmax,[1,1.5],[0.001,0.07], 15, save_name="s_uSmax")
-    #make_2D_bifur(s,pmax,[1,1.5],[0.001,1], 15, save_name="s_pmax")
+    make_2D_bifur(eps,uSmax,[1,1.5],[0.001,0.07], 15, save_name="eps_uSmax")
+    make_2D_bifur(eps,pmax,[1,1.5],[0.001,1], 15, save_name="eps_pmax")
     
-    #make_2D_bifur(pmax,uSmax,[0.01,1],[0.001,0.07], 15, save_name="pmax_uSmax")
-    #make_2D_bifur(s,NI,[1,1.5],[0.0,0.00175], 15, save_name="s_NI")
-    #make_2D_bifur(s,CI,[1,1.5],[0.07,0.15], 15, save_name="s_CI")
+    make_2D_bifur(pmax,uSmax,[0.01,1],[0.001,0.07], 15, save_name="pmax_uSmax")
+    make_2D_bifur(eps,NI,[1,1.5],[0.0,0.00175], 15, save_name="eps_NI")
+    make_2D_bifur(eps,CI,[1,1.5],[0.07,0.15], 15, save_name="eps_CI")
 
-    #make_2D_bifur(s,rho0,[1,1.5],[0.001,0.1], 15, save_name="s_rhoFood")
-    #make_2D_bifur(s,QFood,[1,1.5],[0.01,0.20], 15, save_name="s_QFood")
+    make_2D_bifur(eps,rho0,[1,1.5],[0.001,0.1], 15, save_name="eps_rhoFood")
+    make_2D_bifur(eps,QFood,[1,1.5],[0.01,0.20], 15, save_name="eps_QFood")
 
 
 def plot_and_save():
     ## Plot large simulation displaying estab
-    #big_sim(figsize=(6,6))
-    #plt.savefig("figs/plotted_sims/estab_plus_heat_wave.png", dpi=300, bbox_inches="tight") 
-    #plt.savefig("figs/pdf_figs/estab_plus_heat_wave.pdf", bbox_inches="tight")
+    big_sim(figsize=(6,6))
+    plt.savefig("figs/plotted_sims/estab_plus_heat_wave.png", dpi=300, bbox_inches="tight") 
+    plt.savefig("figs/pdf_figs/estab_plus_heat_wave.pdf", bbox_inches="tight")
 
     ### Plot area of attraction
-    #big_aoa_plot(figsize=(6,5))
-    #plt.savefig("figs/plotted_sims/aoa_collection.png", dpi=300, bbox_inches="tight")
-    #plt.savefig("figs/pdf_figs/aoa_collection.pdf", bbox_inches="tight")
+    big_aoa_plot(figsize=(6,5))
+    plt.savefig("figs/plotted_sims/aoa_collection.png", dpi=300, bbox_inches="tight")
+    plt.savefig("figs/pdf_figs/aoa_collection.pdf", bbox_inches="tight")
 
 
     ## Plot 2D bifurcations
     big_2D_plot((6,5))                               
-    #plt.savefig("figs/plotted_sims/2D_bifur.png", dpi=300, bbox_inches="tight")
-    #plt.savefig("figs/pdf_figs/2D_bifur.pdf", bbox_inches="tight")
+    plt.savefig("figs/plotted_sims/2D_bifur.png", dpi=300, bbox_inches="tight")
+    plt.savefig("figs/pdf_figs/2D_bifur.pdf", bbox_inches="tight")
 
     ## Supplementary plots
-    #plot_bifur("sims/bifur_df.csv", [eps, rho0, NI, CI ],       save_name="bifur_external")
-    #plot_bifur("sims/bifur_df.csv", [uSmax, KNS, pmax, KCO2], save_name="bifur_symbiont")
+    plot_bifur("sims/bifur_df.csv", [eps, rho0, NI, CI ],       save_name="bifur_external")
+    plot_bifur("sims/bifur_df.csv", [uSmax, KNS, pmax, KCO2], save_name="bifur_symbiont")
     
 
-    #suppl_aoa_plot((6,5/3))
-    #plt.savefig("figs/plotted_sims/suppl_aoa.png", dpi=300, bbox_inches="tight")
-    #plt.savefig("figs/pdf_figs/suppl_aoa.pdf", bbox_inches="tight")
+    suppl_aoa_plot((6,5/3))
+    plt.savefig("figs/plotted_sims/suppl_aoa.png", dpi=300, bbox_inches="tight")
+    plt.savefig("figs/pdf_figs/suppl_aoa.pdf", bbox_inches="tight")
 
-    #suppl_estab()
-    #plt.savefig("figs/plotted_sims/suppl_estab.png", dpi=300, bbox_inches="tight")
-    #plt.savefig("figs/pdf_figs/suppl_estab.pdf", bbox_inches="tight")
+    suppl_estab()
+    plt.savefig("figs/plotted_sims/suppl_estab.png", dpi=300, bbox_inches="tight")
+    plt.savefig("figs/pdf_figs/suppl_estab.pdf", bbox_inches="tight")
 
 
 def plot_slide_pics():
@@ -598,7 +600,7 @@ def plot_slide_pics():
 
 
 if __name__ == "__main__":
-    make_data()
+    #make_data()
     plot_and_save()
     #plot_slide_pics()
 

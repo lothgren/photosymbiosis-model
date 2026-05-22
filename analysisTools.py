@@ -454,7 +454,7 @@ def prob_of_states(n, ranges = None, cons = [], save_name=False):
         name = ""
         for p, v in cons:
             name = name + f"_{_saveable_name(p)}={v}"
-    np.savetxt("sims/aoa_" + name + "_raw.txt", mat)
+    np.savetxt("sims/aoa" + name + "_raw.txt", mat)
     
     return mat
 
