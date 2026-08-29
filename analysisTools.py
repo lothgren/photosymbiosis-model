@@ -30,19 +30,19 @@ p = sns.color_palette("colorblind")
 info = pd.DataFrame( 
     data = [["$H$",                   "$H$",                       r"mol C$_\text{org}$/m$^2$",     "Organism biomass",         p[0], (1,0)],
             ["$S$",                   "$S$",                       r"mol C$_\text{org}$/m$^2$",     "Organism biomass",         p[2], (1,0)],
-            ["$N$",                   "$N$",                       r"mol DIN/mol C$_\text{org}$",   "Inorganic pool",           p[4], (1,0)],
+            ["$N$",                   "$N$",                       r"mol N/mol C$_\text{org}$",   "Inorganic pool",           p[4], (1,0)],
             ["$C$",                   "$C$",                       r"mol DIC/mol C$_\text{org}$",   "Inorganic pool",           p[3], (1,0)],
             ["$S/H$",                 "$S/H$",                     "-",           "Symbiont load",            p[1], (1,0)],
 
-            [r"$\mu_H$",              "$H$ GR",                    "1/d",                  "Host carbon flux",         p[0], (1,0)],
-            [r"$\mu_S$",              "$R$ GR",                    "1/d",                  "Endosymbiont carbon flux", p[2], (1,0)],
-            ["$f$",                   "HFR",                       "1/d",                  "Host carbon flux",         p[7], (1,0)],
-            ["$p_H$",                 "PAR",                       "1/d",                  "Host carbon flux",         p[1], (1,0)],
+            [r"$\mu_H$",              "$H$ GR",                    r"mol C$_\text{org}$/mol C$_\text{org}$/d",                  "Host carbon flux",         p[0], (1,0)],
+            [r"$\mu_S$",              "$R$ GR",                    r"mol C$_\text{org}$/mol C$_\text{org}$/d",                  "Endosymbiont carbon flux", p[2], (1,0)],
+            ["$f$",                   "HFR",                       r"mol C$_\text{org}$/mol C$_\text{org}$/d",                  "Host carbon flux",         p[7], (1,0)],
+            ["$p_H$",                 "PAR",                       r"mol C$_\text{org}$/mol C$_\text{org}$/d",                  "Host carbon flux",         p[1], (1,0)],
             ["$p_S$",                 "DIC fication rate",         "1/d",                  "Endosymbiont carbon flux", p[2], (2,2)],
             ["$r_H$",                 "$H$ resp. rate",            r"mol DIC/mol C$_\text{org}$/d",                  "Inorganic carbon flux",    p[0], (2,2)],
             ["$r_S$",                 "$S$ resp. rate",            "1/d",                  "Inorganic carbon flux",    p[2], (2,2)],
-            ["$H$ net DIN upt.",      "$H$ net DIN upt.",          r"mol DIN/mol C$_\text{org}$/d",                  "Inorganic nutrient flux",  p[0], (1,0)],
-            ["$S$ net DIN upt.",      "$S$ net DIN upt.",          "1/d",                  "Inorganic nutrient flux",  p[2], (1,0)],
+            ["$H$ net N upt.",      "$H$ net N upt.",          r"mol N/mol C$_\text{org}$/d",                  "Inorganic nutrient flux",  p[0], (1,0)],
+            ["$S$ net N upt.",      "$S$ net N upt.",          "1/d",                  "Inorganic nutrient flux",  p[2], (1,0)],
             ["$e_H$",                 "$H$ net growth efficiancy", "-",                             "Net growth efficiency",    p[0], (1,0)],
             ["$e_S$",                 "$S$ net growth efficiancy", "-",                             "Net growth efficiency",    p[2], (1,0)]],
     columns = ["tex_symbol", "tex_name", "unit", "type", "color", "dashes"],
@@ -52,7 +52,7 @@ info = pd.DataFrame(
 
 def sim_system(y0,t_span,cons=[],t_eval=None):
     """
-    Numerical simulation with picked arguments fitting for the ODE fiunction "endo"
+    Numerical simulation with picked arguments fitting for the ODE fiunction "photo"
     
     Args:
         y0 (array-like): Initial values of the numerical simulation
@@ -64,7 +64,7 @@ def sim_system(y0,t_span,cons=[],t_eval=None):
         tuple: Tuple returning the content of the simulation and total parameter set. Return (None)*4 if simulation failed
     """
     cD  = make_cons(cons)
-    sol = integ.solve_ivp(endo, y0=y0, t_span=t_span, t_eval=t_eval, args=(cD,), dense_output=False, method="Radau", vectorized=True,
+    sol = integ.solve_ivp(photo, y0=y0, t_span=t_span, t_eval=t_eval, args=(cD,), dense_output=False, method="Radau", vectorized=True,
                           max_step = np.inf, rtol=1e-8, atol = 1e-8, events=[symb_death, load_stop])
     if sol.status == 1:
         return sol.t_events[0][0], sol.y_events[0][0], make_funcs(sol.t_events[0][0],sol.y_events[0][0],cD), cD
@@ -88,7 +88,7 @@ def check_for_fps(H_limited, S_limited, cD):
         list[tuple]: List of fixed points
     """
 
-    [dH,dS,dN,dC] = endo_symbolic(H_limited,S_limited)
+    [dH,dS,dN,dC] = photo_symbolic(H_limited,S_limited)
     f_subbed = [dH.subs(cD),dS.subs(cD),dN.subs(cD),dC.subs(cD)]
     fps = sp.solve(f_subbed,[H, S, N, C])
     #print(fixedPoints)
@@ -108,11 +108,11 @@ def check_symb_stab(yStar, cD):
     funcs = make_funcs(np.nan,yStar,cD)
     state= [funcs[-2]<1/(1+cD[eps]),  funcs[-1]<1/(1+cD[eps])]
 
-    F = sp.Matrix(endo_symbolic(state[0],state[1])).subs(cD)
+    F = sp.Matrix(photo_symbolic(state[0],state[1])).subs(cD)  #Symbolically calcs jacobian
     J = F.jacobian([H,S,N,C])
     J = J.subs([(H,yStar[0]), (S,yStar[1]), (N,yStar[2]), (C,yStar[3])])
 
-    eig, _ = la.eig(np.array(J.tolist(), dtype=float))
+    eig, _ = la.eig(np.array(J.tolist(), dtype=float))         #Numerically calcs eigenvalues of jacobian
     stab, numDir = True, 0
 
     for val in eig:
@@ -253,7 +253,7 @@ def make_num_bifur(para, span, base_cons=[]):
             fp_old = np.array(standard_fp, dtype="float64")
             for para_value in para_list:
                 cD = make_cons(base_cons+[(para,para_value)])
-                func = lambda y: endo(0,y,cD,min_func=min_approx)
+                func = lambda y: photo(0,y,cD,min_func=min_approx)
 
                 fp = find_fp_num(func, fp_old)
                 if fp is not None:
@@ -298,7 +298,7 @@ def make_df(t, y, funcs, save_name = ""):
 
 def save_bifur_data(paras=None, cons=[], save_name=""):
     para_spans = { eps: [1,1.4], to: [1,1.25], pmax: [0.01,1.0], uSmax: [0.005,0.09], uHmax: [0.0,0.01], KNS: [0.0001,0.12], KNH: [0.0,0.002], 
-            delC: [0.0,0.7], CI: [0.0,0.15], delN: [0.0,0.5], NI: [0.0,0.002], mH: [0.01,0.05], mS: [0.03,0.2], KCO2: [0.0001,0.06], rho0: [0,0.1],
+            delC: [0.0,0.7], CI: [0.0,0.15], delN: [0.0,0.5], NI: [0.0,0.002], mH: [0.01,0.05], mS: [0.03,0.15], KCO2: [0.0001,0.06], rho0: [0,0.1],
             QFood: [0,0.2], QS: [0.01,0.2], QH: [0.01,0.2], g: [0.01, 1], iota: [0,0.1] }
     subset = dict( [(p, para_spans[p]) for p in paras]) if paras else para_spans
 
@@ -482,7 +482,7 @@ def plot_sim(df, var_list, ax=None, yscale="log", ybottom=None, ytop=None):
     var_list = [info.loc[var, "tex_symbol"] for var in var_list]
     data     = df[var_list]
 
-    if not ax:
+    if ax is None:
         fig, ax = plt.subplots()
 
     sns.lineplot(data, palette=palette, ax=ax, dashes=False, legend="brief", zorder=1)   # dashes = [(1,0), (1,1), osv.]
@@ -548,9 +548,16 @@ def plot_bifur(path, paras, vars = ["H", "S"], save_name = ""):
 #
 
     g.set_titles("")        # Set new titles and x labels
-    g.set_ylabels(info.loc[vars[0], "unit"])
-    for ax, xlabel in zip(g.axes.flat, [p.name for p in paras]):
-        ax.set_xlabel(f"${xlabel}$")
+    g.set_ylabels(f"Fixed point biomass", fontsize=10) #{info.loc[vars[0], "unit"]}"
+
+    para_desc = {eps: "Metabolic costs", rho0: "Max heterotrophy", NI: "Environmental N", CI: "Environmental C",
+                 uSmax: "Max N uptake", KNS: "N half-saturation",
+                 pmax: "Max C fixation", KCO2: "C half-saturation",
+                 QFood: "Food cell-quota", QS: "Symbiont cell-quota", QH: "Host cell-quota", mS: "Symbiont turnover"}
+
+    for ax, p in zip(g.axes.flat, paras):
+        xlabel = f"{para_desc[p]} (${p.name}$)" if p in para_desc else f"${p.name}$"
+        ax.set_xlabel(xlabel, fontsize=10)
 
     ## Setting subplot names
     for ax, subname in zip(g.axes.flat, "abcdefghijklmnop"):
@@ -561,6 +568,7 @@ def plot_bifur(path, paras, vars = ["H", "S"], save_name = ""):
     if save_name:
         plt.savefig("figs/bifurs/" + save_name + ".png", dpi=300, bbox_inches="tight")
         plt.savefig("figs/pdf_figs/" + save_name + ".pdf", bbox_inches="tight")
+        plt.savefig("submission/" + save_name + ".tiff", bbox_inches="tight")
     return g
 
 
@@ -706,6 +714,10 @@ def plot_aoa(path, plot_vars, grid_size = 30, save_name = "", ax=None):
 
 
 if __name__ == "__main__":  
-    make_num_bifur(uSmax,[0.005,0.08])
-    make_num_bifur(eps,[1,1.3])
+    print(find_all_fps())   
+    
+    #make_num_bifur(uSmax,[0.005,0.08])
+    #make_num_bifur(eps,[1,1.3])
+
+    #plot_bifur("sims/bifur_df.csv", [QFood,QS,QH], vars=["H","S"], save_name="")
     

@@ -58,7 +58,7 @@ def make_funcs(t, y, cD, min_func = np.minimum, max_func = np.maximum):
     return muH, muS, rhoDOC, rhoPhoto, pS, rH, rS, netNH, netNS, eH, eS
     
 
-def endo(t, y, cD, min_func = np.minimum, max_func = np.maximum):
+def photo(t, y, cD, min_func = np.minimum, max_func = np.maximum):
     H, S, N, C = y
     muH, muS, rhoDOC, rhoPhoto, pS, rH, rS, netNH, netNS, eH, eS  = make_funcs(t,y,cD,min_func,max_func)
 
@@ -71,7 +71,7 @@ def endo(t, y, cD, min_func = np.minimum, max_func = np.maximum):
     return [dH,dS,dN,dC]
 
 
-def endo_symbolic(nLimH = False, nLimS = True):
+def photo_symbolic(nLimH = False, nLimS = True):
     rhoDOC = rho0*(1-H/HCap)
     rhoDON = rhoDOC*QFood
 
@@ -159,7 +159,7 @@ if __name__ == "__main__":
     tEnd = 300
     cD = make_cons([])
 
-    sol = integ.solve_ivp(endo, y0=y0, t_span=[0,tEnd], args=(cD,), dense_output=False, vectorized=True, method="Radau", max_step = np.inf, rtol=1e-8, atol = 1e-8, events=[])
+    sol = integ.solve_ivp(photo, y0=y0, t_span=[0,tEnd], args=(cD,), dense_output=False, vectorized=True, method="Radau", max_step = np.inf, rtol=1e-8, atol = 1e-8, events=[])
     print(sol)
 
     ### Plotting 

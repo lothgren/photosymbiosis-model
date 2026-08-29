@@ -198,3 +198,5 @@ cython_debug/
 /figs_old
 /sims_old
 /testing.py
+/submission
+/beamer_and_poster_figs
