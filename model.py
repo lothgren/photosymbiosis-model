@@ -1,7 +1,6 @@
 #############################################################################################################
 ### This script contains the ODE function of the photosymbiosis model as well as a sympy symbolic version ###
 #############################################################################################################
-
 import numpy as np
 import sympy as sp
 

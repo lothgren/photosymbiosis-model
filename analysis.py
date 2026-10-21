@@ -386,41 +386,41 @@ def plot_and_save():
     small_fs = 8
 
     ## Plot large simulation displaying estab
-    big_sim(figsize=(6,6), large_fs=large_fs, small_fs=small_fs, phase_legend=False)
-    #plt.savefig("figs/plotted_sims/estab_plus_heat_wave.png", dpi=300, bbox_inches="tight") 
-    plt.savefig("figs/pdf_figs/estab_plus_heat_wave.pdf", bbox_inches="tight", transparent=False)
+    big_sim(figsize=(6,6), large_fs=large_fs, small_fs=small_fs, phase_legend=True)
+    plt.savefig("C:/Users/edvin.loethgren/Downloads/fig2.tiff", dpi=300, bbox_inches="tight") 
+    #plt.savefig("figs/pdf_figs/estab_plus_heat_wave.pdf", bbox_inches="tight", transparent=False)
     #plt.savefig("submission/figure2.eps", format="eps", bbox_inches="tight")
 
     ## Plot area of attraction
-    big_aoa_plot(figsize=(6,5), large_fs=large_fs, small_fs=small_fs)
+    #big_aoa_plot(figsize=(6,5), large_fs=large_fs, small_fs=small_fs)
     #plt.savefig("figs/plotted_sims/aoa_collection.png", dpi=300, bbox_inches="tight")
-    plt.savefig("figs/pdf_figs/aoa_collection.pdf", bbox_inches="tight")
+    #plt.savefig("figs/pdf_figs/aoa_collection.pdf", bbox_inches="tight")
     #plt.savefig("submission/aoa_collection.tiff", bbox_inches="tight")
 
     ## Plot 2D bifurcations
-    big_2D_plot((6,5), large_fs=large_fs, small_fs=small_fs)                               
+    #big_2D_plot((6,5), large_fs=large_fs, small_fs=small_fs)                               
     #plt.savefig("figs/plotted_sims/2D_bifur.png", dpi=300, bbox_inches="tight")
-    plt.savefig("figs/pdf_figs/2D_bifur.pdf", bbox_inches="tight")
+    #plt.savefig("figs/pdf_figs/2D_bifur.pdf", bbox_inches="tight")
     #plt.savefig("submission/figure3.eps", format="eps", bbox_inches="tight")
 
     ## Supplementary plots
-    plot_bifur("sims/bifur_df.csv", [eps, rho0, NI, CI ],       save_name="bifur_external")
-    plot_bifur("sims/bifur_df.csv", [uSmax, KNS, pmax, KCO2], save_name="bifur_symbiont")
-    plot_bifur("sims/bifur_df.csv", [QFood,QS,QH, mS], save_name="bifur_quotas")
+    #plot_bifur("sims/bifur_df.csv", [eps, rho0, NI, CI ],       save_name="bifur_external")
+    #plot_bifur("sims/bifur_df.csv", [uSmax, KNS, pmax, KCO2], save_name="bifur_symbiont")
+    #plot_bifur("sims/bifur_df.csv", [QFood,QS,QH, mS], save_name="bifur_quotas")
     
 
-    suppl_aoa_plot((6,5/3), large_fs=large_fs, small_fs=small_fs)
+    #suppl_aoa_plot((6,5/3), large_fs=large_fs, small_fs=small_fs)
     #plt.savefig("figs/plotted_sims/suppl_aoa.png", dpi=300, bbox_inches="tight")
-    plt.savefig("figs/pdf_figs/suppl_aoa.pdf", bbox_inches="tight")
+    #plt.savefig("figs/pdf_figs/suppl_aoa.pdf", bbox_inches="tight")
     #plt.savefig("submission/suppl_aoa.tiff", bbox_inches="tight")
 
-    suppl_estab()
+    #suppl_estab()
     #plt.savefig("figs/plotted_sims/suppl_estab.png", dpi=300, bbox_inches="tight")
-    plt.savefig("figs/pdf_figs/suppl_estab.pdf", bbox_inches="tight")
+    #plt.savefig("figs/pdf_figs/suppl_estab.pdf", bbox_inches="tight")
     #plt.savefig("submission/suppl_estab.tiff", bbox_inches="tight")
 
-    suppl_zoom_in(small_fs=small_fs, large_fs=large_fs)
-    plt.savefig("figs/pdf_figs/suppl_zoom_in.pdf", bbox_inches="tight")
+    #suppl_zoom_in(small_fs=small_fs, large_fs=large_fs)
+    #plt.savefig("figs/pdf_figs/suppl_zoom_in.pdf", bbox_inches="tight")
     
    
 

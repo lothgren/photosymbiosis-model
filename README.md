@@ -1,17 +1,23 @@
 # Photosymbiosis model
-This repositories contains the code used to analyze and visualize the model
+This repositories contains the code used to analyze and visualize the model of the following publication:
+
+Löthgren E, Rädecker N, Gaedke U, Klauschies T (2026) Dynamic nutrient competition (de-)stabilizes photosymbiosis. mSystems 0:e00631-26.https://doi.org/10.1128/msystems.00631-26
+
+The paper is published as part of the research group **DynSym** (https://www.dynasym.uni-konstanz.de/), project 2, founded by the **Deutsche Forschungsgemeinschaft** (DFG; German Research Foundation)—project number 528028597 (https://www.dfg.de/)
+
+
 
 The repository is structred as follows:
 
-### model.py
+## model.py
 Contains the ODE function for model of project, photo, as well as its symbolic version.
 
-### analysisTools.py
+## analysisTools.py
 Contains tools used to analyse the model, e.g. simulating, finding fixed points, creating bifurcation diagrams numerically and symbolically
 
-### analysis.py
+## analysis.py
 Script where the tools are used to analyze the system and create figures used in the research article
 
-N.B. Symbolic calculation is often time consuming (and the code is probably not as optomised as it could be) and thus for initial bifurcation analys it is recommended to use the numerics based functions
+> N.B. THe symbolic calculations are often time consuming (and the code is probably not as optomised as it could be) and thus for initial bifurcation analys it is recommended to use the numerics based functions
 
-N.B. The proper documentation, annotation and general readability of the code *might* be update in a later time, either in this repository or in future projects
+> N.B. The proper documentation, annotation and general readability of the code *might* be update in a later time, either in this repository or in future projects. Version 1.0 is the final version used in the publication of the above article.
